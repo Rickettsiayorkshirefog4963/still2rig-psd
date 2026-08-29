@@ -1,0 +1,27 @@
+{
+  "schemaVersion": 1,
+  "description": "Renderer adapters should record these states and submit frame metrics before claiming motion-ready output.",
+  "requiredCaptures": [
+    "neutral",
+    "blink-four-state",
+    "mouth-four-state",
+    "lip-sync-continuous",
+    "hair-physics-only",
+    "full-body-idle",
+    "drag-inertia"
+  ],
+  "thresholds": {
+    "mouthChangedPixelsMinimum": 120,
+    "eyeChangedPixelsMinimum": 180,
+    "nonEyeMaeMaximum": 0.35,
+    "hairTipChangeRatioMinimum": 0.012,
+    "fixedFeatureMaeMaximum": 0.45,
+    "leftRightEyeRelativeResidualPxMaximum": 3.5,
+    "mouthToEyesRelativeResidualPxMaximum": 5,
+    "unexpectedSeamPixelsMaximum": 12
+  },
+  "negativeFixture": {
+    "operation": "shift mouth_close by +24px in memory",
+    "expected": "FAIL"
+  }
+}

@@ -1,0 +1,35 @@
+{
+  "name": "still2rig-psd",
+  "version": "0.1.0",
+  "description": "Codex-guided Google Colab workflow for turning a static anime image into a QA-gated rig-ready PSD.",
+  "private": true,
+  "type": "module",
+  "workspaces": [
+    "webui"
+  ],
+  "scripts": {
+    "still2rig-psd": "node bin/still2rig-psd.mjs",
+    "doctor": "node bin/still2rig-psd.mjs doctor",
+    "test": "node --test",
+    "check": "npm test && node bin/still2rig-psd.mjs self-test",
+    "preview": "npm run dev --workspace @still2rig-psd/webui",
+    "preview:build": "npm run build --workspace @still2rig-psd/webui",
+    "preview:qa": "npm run qa --workspace @still2rig-psd/webui"
+  },
+  "engines": {
+    "node": ">=20.19.0"
+  },
+  "dependencies": {
+    "ag-psd": "30.1.0"
+  },
+  "devDependencies": {},
+  "license": "MIT",
+  "keywords": [
+    "anime",
+    "psd",
+    "rigging",
+    "codex",
+    "google-colab",
+    "mcp"
+  ]
+}

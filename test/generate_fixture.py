@@ -1,0 +1,63 @@
+#!/usr/bin/env python3
+"""Generate small synthetic full-canvas PNG layers for tests."""
+
+from __future__ import annotations
+
+import argparse
+from pathlib import Path
+
+from PIL import Image, ImageDraw
+
+
+def layer(size=(96, 96)):
+    return Image.new("RGBA", size, (0, 0, 0, 0))
+
+
+def save_rect(root: Path, name: str, box, color):
+    image = layer()
+    ImageDraw.Draw(image).rectangle(box, fill=color)
+    image.save(root / name)
+
+
+def main():
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--output", type=Path, required=True)
+    parser.add_argument("--mouth-shift", type=int, default=0)
+    parser.add_argument("--mouth-patch", action="store_true")
+    parser.add_argument("--without-expressions", action="store_true")
+    args = parser.parse_args()
+    args.output.mkdir(parents=True, exist_ok=True)
+
+    save_rect(args.output, "back hair.png", (12, 5, 84, 82), (70, 35, 20, 255))
+    save_rect(args.output, "topwear.png", (18, 67, 78, 95), (40, 50, 70, 255))
+    save_rect(args.output, "neck.png", (40, 55, 56, 78), (240, 185, 150, 255))
+    save_rect(args.output, "face.png", (24, 15, 72, 67), (250, 205, 175, 255))
+    image = layer()
+    draw = ImageDraw.Draw(image)
+    draw.rectangle((31, 31, 43, 38), fill=(255, 255, 255, 255))
+    draw.rectangle((53, 31, 65, 38), fill=(255, 255, 255, 255))
+    image.save(args.output / "eyewhite.png")
+    image = layer()
+    draw = ImageDraw.Draw(image)
+    draw.rectangle((34, 30, 40, 38), fill=(30, 120, 150, 255))
+    draw.rectangle((56, 30, 62, 38), fill=(30, 120, 150, 255))
+    image.save(args.output / "irides.png")
+    image = layer()
+    draw = ImageDraw.Draw(image)
+    if args.mouth_patch:
+        draw.rounded_rectangle((34, 44, 62, 60), radius=5, fill=(250, 245, 240, 255))
+    else:
+        draw.arc((40, 46, 56, 55), 10, 170, fill=(150, 45, 45, 255), width=3)
+    image.save(args.output / "mouth.png")
+    if not args.without_expressions:
+        save_rect(args.output, "mouth_open.png", (42 + args.mouth_shift, 48, 54 + args.mouth_shift, 56), (90, 20, 25, 255))
+        image = layer()
+        draw = ImageDraw.Draw(image)
+        draw.rectangle((33, 32, 41, 37), fill=(70, 30, 20, 255))
+        draw.rectangle((55, 32, 63, 37), fill=(70, 30, 20, 255))
+        image.save(args.output / "eye_close.png")
+    save_rect(args.output, "front hair.png", (20, 5, 76, 28), (85, 45, 25, 255))
+
+
+if __name__ == "__main__":
+    main()

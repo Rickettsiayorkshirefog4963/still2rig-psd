@@ -1,0 +1,31 @@
+{
+  "schemaVersion": 1,
+  "seeThrough": {
+    "repository": "https://github.com/shitagaki-lab/see-through.git",
+    "revision": "7f139bb25c46a0c8ac720d95ddab185fcda5451c",
+    "resolution": 1280,
+    "depthResolution": 768,
+    "inferenceSteps": 30,
+    "seed": 42,
+    "splitTopBottomLeftRight": true,
+    "groupOffload": false
+  },
+  "colab": {
+    "requiredGpuPattern": "L4",
+    "port": 0,
+    "connectTimeoutSeconds": 3600
+  },
+  "quality": {
+    "alphaThreshold": 16,
+    "minimumComponentPixels": 40,
+    "dropOptionalBelowPixels": 1000,
+    "registrationTolerancePixels": 8,
+    "mouthMaxVisiblePixelRatio": 0.00035,
+    "mouthMaxVisiblePixelsFloor": 150,
+    "mouthMaxWidthRatio": 0.045,
+    "mouthMaxHeightRatio": 0.02,
+    "mouthCloseMaxFillRatio": 0.65,
+    "mouthMaxBrightPixelRatio": 0.2,
+    "maximumInputBytes": 20971520
+  }
+}

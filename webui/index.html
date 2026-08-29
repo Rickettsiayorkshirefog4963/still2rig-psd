@@ -1,0 +1,289 @@
+<!doctype html>
+<html lang="ja">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Still2Rig PSD Motion Preview</title>
+    <style>
+      :root { color-scheme: dark; font-family: Inter, ui-sans-serif, system-ui, sans-serif; }
+      * { box-sizing: border-box; }
+      body { margin: 0; min-height: 100vh; overflow: hidden; background: #10131b; color: #f5f7ff; }
+      main { height: 100vh; min-height: 0; display: grid; grid-template-rows: auto minmax(0, 1fr); background: radial-gradient(circle at 26% 18%, #303a52, #11141d 62%); }
+      .app-header { position: relative; z-index: 10; isolation: isolate; transform: translateZ(0); display: grid; grid-template-columns: 300px minmax(240px, 1fr) minmax(440px, 560px); gap: 24px; align-items: center; padding: 16px 24px; border-bottom: 1px solid #3c4355; background: #0f131c; box-shadow: 0 12px 32px rgb(0 0 0 / 16%); }
+      .brand-block { min-width: 0; }
+      .brand-line { display: flex; gap: 9px; align-items: center; margin-bottom: 5px; }
+      .label { color: #8f9ab7; font-size: 11px; text-transform: uppercase; letter-spacing: .14em; }
+      h1 { margin: 0; font-size: 22px; line-height: 1.2; white-space: nowrap; }
+      #model-name { margin: 6px 0 0; color: #aeb8d1; font-size: 11px; overflow-wrap: anywhere; }
+      .status-summary { min-width: 0; }
+      .status-line { display: flex; gap: 11px; align-items: flex-start; }
+      #status { flex: none; margin-top: 1px; padding: 5px 8px; color: #0d1d18; background: #71efb3; border-radius: 999px; font-size: 10px; font-weight: 800; }
+      body[data-file-load-state='waiting'] #status { background: #b8c2d8; }
+      body[data-file-load-state='loading'] #status { background: #ffd479; }
+      body[data-file-load-state='error'] #status { background: #ff9eaa; }
+      #phase { font-size: 16px; font-weight: 800; line-height: 1.25; }
+      #detail { margin-top: 3px; color: #b7c1d8; font-size: 11px; line-height: 1.4; }
+      .track { height: 4px; margin-top: 9px; overflow: hidden; opacity: 0; border-radius: 999px; background: #292f3c; transition: opacity 120ms ease; }
+      body[data-file-load-state='loading'] .track { opacity: 1; }
+      #progress { width: 0; height: 100%; background: linear-gradient(90deg, #58d5ff, #a878ff); transition: width 160ms linear; }
+      .header-source { min-width: 0; }
+      .source-actions { display: grid; grid-template-columns: minmax(0, 1fr) auto auto; gap: 8px; align-items: stretch; }
+      #generated-psd-select { width: 100%; min-width: 0; padding: 9px 10px; color: #edf4ff; background: #151b28; border: 1px solid #4a5671; border-radius: 8px; font: 12px/1.3 inherit; }
+      #generated-psd-refresh { white-space: nowrap; }
+      .source-note { margin: 6px 0 0; color: #8f9ab7; font-size: 11px; line-height: 1.4; }
+      .file-button { display: inline-grid; place-items: center; min-height: 40px; padding: 8px 13px; color: #101a23; background: #72d9ff; border-radius: 8px; font: 700 12px/1.2 inherit; cursor: pointer; white-space: nowrap; }
+      .file-button:hover { background: #9be6ff; }
+      #psd-file-input:focus-visible + .file-button { outline: 3px solid #fff; outline-offset: 3px; }
+      .workspace { min-height: 0; display: grid; grid-template-columns: minmax(0, 1fr) minmax(360px, 400px); }
+      .stage { position: relative; min-width: 0; min-height: 0; display: flex; flex-direction: column; align-items: center; justify-content: flex-start; gap: 11px; padding: 24px 30px 20px; overflow: hidden; }
+      canvas { width: min(700px, 100%); max-height: calc(100vh - 184px); height: auto; aspect-ratio: 1; touch-action: none; user-select: none; cursor: grab; object-fit: contain; background: repeating-conic-gradient(#3a4050 0 25%, #252a36 0 50%) 50% / 24px 24px; border: 1px solid #667089; border-radius: 18px; box-shadow: 0 24px 60px rgb(0 0 0 / 35%); }
+      body[data-avatar-dragging='true'] canvas { cursor: grabbing; }
+      body[data-avatar-ready='false'] canvas { cursor: default; }
+      body[data-qa-background='solid'] canvas { background: #00ff00; }
+      .canvas-hint { margin: 0; color: #9ba7c0; font-size: 11px; line-height: 1.4; text-align: center; opacity: 0; transition: opacity 120ms ease; }
+      body[data-avatar-ready='true'] .canvas-hint { opacity: 1; }
+      .drop-overlay { position: absolute; z-index: 5; inset: 20px; display: grid; place-items: center; pointer-events: none; opacity: 0; transform: scale(.985); border: 2px dashed #72d9ff; border-radius: 20px; background: rgb(10 18 31 / 88%); backdrop-filter: blur(7px); transition: opacity 120ms ease, transform 120ms ease; }
+      body[data-file-dragging='true'] .drop-overlay { opacity: 1; transform: scale(1); }
+      .drop-message { display: grid; gap: 8px; max-width: 390px; padding: 28px 34px; text-align: center; border: 1px solid rgb(114 217 255 / 45%); border-radius: 18px; background: rgb(19 29 46 / 88%); box-shadow: 0 18px 55px rgb(0 0 0 / 38%); }
+      .drop-message strong { font-size: 25px; }
+      .drop-message span { color: #c7d3ea; font-size: 13px; line-height: 1.6; }
+      .empty-state { position: absolute; z-index: 2; top: 50%; left: 50%; display: grid; gap: 11px; width: min(360px, calc(100% - 72px)); padding: 24px 28px; text-align: center; border: 1px solid #53617b; border-radius: 15px; background: rgb(13 18 29 / 90%); box-shadow: 0 20px 56px rgb(0 0 0 / 28%); transform: translate(-50%, -54%); transition: opacity 120ms ease; }
+      .empty-state strong { font-size: 20px; }
+      .empty-state span { color: #aeb8d1; font-size: 12px; line-height: 1.55; }
+      .empty-action { justify-self: center; min-height: 42px; }
+      body[data-avatar-ready='true'] .empty-state,
+      body[data-file-load-state='loading'] .empty-state { opacity: 0; pointer-events: none; }
+      .control-panel { min-height: 0; padding: 22px 22px 42px; border-left: 1px solid #3c4355; background: rgb(17 21 31 / 91%); overflow-y: auto; }
+      .panel-title { margin: 0 0 14px; font-size: 14px; font-weight: 750; }
+      pre { display: none; }
+      .controls { display: grid; gap: 14px; }
+      .field { display: grid; gap: 7px; margin: 0; }
+      .field-head { display: flex; justify-content: space-between; align-items: center; color: #d8deed; font-size: 13px; }
+      .field output { color: #71dfff; font-variant-numeric: tabular-nums; }
+      .quick-check { display: grid; gap: 8px; padding: 12px; border: 1px solid #46516a; border-radius: 11px; background: linear-gradient(135deg, rgb(60 84 118 / 35%), rgb(31 38 54 / 55%)); }
+      .quick-check-copy { margin: 0; color: #aeb8d1; font-size: 11px; line-height: 1.45; }
+      .toggle-control { padding: 11px; border: 1px solid #3f4960; border-radius: 11px; background: rgb(31 38 54 / 55%); }
+      .toggle-row { display: grid; grid-template-columns: auto minmax(0, 1fr); gap: 11px; align-items: center; }
+      #blink-toggle { min-width: 76px; }
+      .toggle-note { color: #8f9ab7; font-size: 11px; line-height: 1.45; }
+      .visually-hidden { position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; border: 0; }
+      input[type='range'] { width: 100%; accent-color: #72d9ff; }
+      .zoom-row { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 9px; align-items: center; }
+      #view-reset { white-space: nowrap; }
+      .button-row { display: grid; grid-template-columns: repeat(3, 1fr); gap: 7px; }
+      .mode-note { margin: 0; color: #8f9ab7; font-size: 11px; line-height: 1.4; }
+      .preset-row { display: grid; grid-template-columns: repeat(3, 1fr); gap: 7px; }
+      .tuning-panel { padding: 11px; border: 1px solid #3f4960; border-radius: 11px; background: rgb(31 38 54 / 55%); }
+      .tuning-panel > .field-head { margin-bottom: 9px; }
+      .tuning-details { margin-top: 10px; border-top: 1px solid #3c4559; }
+      .tuning-details summary { padding: 10px 0 3px; color: #9ca8c1; font-size: 12px; font-weight: 650; cursor: pointer; }
+      .tuning-grid { display: grid; gap: 10px; padding-top: 9px; }
+      .tuning-item { display: grid; gap: 5px; }
+      .tuning-item .field-head { font-size: 11px; }
+      .tuning-note { margin: 9px 0 0; color: #8f9ab7; font-size: 11px; line-height: 1.45; }
+      .advanced-panel { border: 1px solid #495570; border-radius: 11px; background: rgb(25 31 45 / 72%); }
+      .advanced-panel > summary { display: flex; justify-content: space-between; gap: 10px; align-items: center; padding: 12px; color: #dbe3f5; font-size: 12px; font-weight: 750; cursor: pointer; list-style: none; }
+      .advanced-panel > summary::-webkit-details-marker { display: none; }
+      .advanced-panel > summary::after { content: '展開'; color: #71dfff; font-size: 10px; font-weight: 650; }
+      .advanced-panel[open] > summary::after { content: '閉じる'; }
+      .advanced-content { display: grid; gap: 10px; padding: 0 11px 12px; border-top: 1px solid #3c4559; }
+      .advanced-intro { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 10px; align-items: center; padding-top: 11px; }
+      .advanced-intro p { margin: 0; color: #9ba7c0; font-size: 11px; line-height: 1.5; }
+      #advanced-reset { min-height: 36px; white-space: nowrap; }
+      .parameter-group { border: 1px solid #3f4960; border-radius: 9px; background: rgb(18 23 34 / 58%); }
+      .parameter-group > summary { display: flex; justify-content: space-between; gap: 8px; padding: 10px; color: #cbd5eb; font-size: 11px; font-weight: 700; cursor: pointer; }
+      .parameter-count { color: #7f8da9; font-weight: 500; }
+      .parameter-grid { display: grid; gap: 11px; padding: 2px 10px 11px; }
+      .advanced-item { display: grid; gap: 5px; }
+      .advanced-item .field-head { font-size: 11px; }
+      .parameter-default { color: #77849f; font-size: 9px; font-weight: 500; }
+      .parameter-input-row { display: grid; grid-template-columns: minmax(0, 1fr) 68px; gap: 8px; align-items: center; }
+      .parameter-number { width: 100%; min-height: 32px; padding: 5px 6px; color: #eaf1ff; background: #121824; border: 1px solid #46516a; border-radius: 7px; font: 11px/1.2 ui-monospace, SFMono-Regular, Menlo, monospace; text-align: right; }
+      button { min-height: 40px; padding: 8px 9px; color: #e8edf9; background: #252c3c; border: 1px solid #48536c; border-radius: 9px; font: 600 12px/1.2 inherit; cursor: pointer; }
+      button:hover { background: #30394e; }
+      button:focus-visible, select:focus-visible, input:focus-visible { outline: 3px solid #72d9ff; outline-offset: 2px; }
+      button:disabled, input:disabled, select:disabled { cursor: not-allowed; opacity: .45; }
+      button[aria-pressed='true'] { color: #0e1720; background: #72d9ff; border-color: #72d9ff; }
+      .demo-row { display: grid; grid-template-columns: 1fr auto; gap: 7px; }
+      #demo-start { background: linear-gradient(90deg, #47c8f5, #9b75ff); border: 0; color: #fff; }
+      @media (max-width: 1100px) {
+        .app-header { grid-template-columns: 300px minmax(420px, 1fr); }
+        .status-summary { grid-column: 1 / -1; grid-row: 2; }
+        .workspace { grid-template-columns: minmax(0, 1fr) 380px; }
+        canvas { max-height: calc(100vh - 250px); }
+      }
+      @media (max-width: 800px) {
+        body { overflow: auto; }
+        main { height: auto; min-height: 100svh; }
+        .app-header { grid-template-columns: 1fr; gap: 14px; padding: 18px 16px; }
+        .brand-block, .status-summary, .header-source { grid-column: 1; grid-row: auto; }
+        h1 { white-space: normal; }
+        .status-summary { order: 2; }
+        .header-source { order: 3; }
+        .source-actions { grid-template-columns: minmax(0, 1fr) auto; }
+        #generated-psd-select { grid-column: 1 / -1; min-height: 44px; }
+        #generated-psd-refresh, .file-button { min-height: 44px; }
+        .workspace { grid-template-columns: 1fr; }
+        .stage { min-height: min(112vw, 520px); padding: 18px 16px; }
+        canvas { width: min(100%, 520px); max-height: none; touch-action: pan-y; }
+        .empty-state { width: min(340px, calc(100% - 48px)); }
+        .control-panel { padding: 22px 16px 38px; border-top: 1px solid #3c4355; border-left: 0; overflow: visible; }
+        button, .file-button { min-height: 44px; }
+      }
+    </style>
+  </head>
+  <body data-avatar-ready="false" data-file-load-state="waiting">
+    <main>
+      <header class="app-header">
+        <div class="brand-block">
+          <div class="brand-line">
+            <span class="label">Still2Rig PSD Preview</span>
+          </div>
+          <h1>PSDモーションプレビュー</h1>
+          <p id="model-name">PSD未選択</p>
+        </div>
+
+        <div class="status-summary" role="status" aria-live="polite">
+          <div class="status-line">
+            <span id="status">待機中</span>
+            <div>
+              <div id="phase">PSDを選択してください</div>
+              <div id="detail">生成済みPSD、または手元のPSDをブラウザ内で読み込めます。</div>
+            </div>
+          </div>
+          <div class="track" role="progressbar" aria-label="PSD読み込み進捗" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0"><div id="progress"></div></div>
+        </div>
+
+        <div class="header-source" aria-label="PSDの選択">
+          <div class="source-actions">
+            <select id="generated-psd-select" aria-label="生成済みPSD" disabled>
+              <option value="">生成済みPSDはありません</option>
+            </select>
+            <button id="generated-psd-refresh" type="button">一覧を更新</button>
+            <input id="psd-file-input" class="visually-hidden" type="file" accept=".psd,image/vnd.adobe.photoshop" />
+            <label id="psd-file-button" class="file-button" for="psd-file-input">手元のPSDを開く</label>
+          </div>
+          <p id="generated-psd-note" class="source-note">生成済みPSDを確認しています。ファイルは外部へ送信されません。</p>
+        </div>
+      </header>
+
+      <div class="workspace">
+        <section class="stage" aria-label="PSDプレビュー">
+          <canvas id="rig-canvas" width="1280" height="1280" aria-label="Still2Rig PSD motion preview canvas"></canvas>
+          <p class="canvas-hint">ドラッグで移動・ホイールで拡大縮小</p>
+          <div class="empty-state">
+            <strong>PSDを読み込んでください</strong>
+            <span>上の一覧から選ぶか、手元のPSDを開いて動きを確認できます。</span>
+            <label class="file-button empty-action" for="psd-file-input">手元のPSDを開く</label>
+          </div>
+          <div id="drop-overlay" class="drop-overlay" aria-hidden="true">
+            <div class="drop-message">
+              <strong>PSDをここにドロップ</strong>
+              <span>ファイルは外部へ送信せず、このブラウザ内だけで解析します。</span>
+            </div>
+          </div>
+        </section>
+
+        <aside class="control-panel">
+          <h2 class="panel-title">動作を確認</h2>
+          <div class="quick-check">
+            <div class="field-head"><span>最初にまとめて確認</span></div>
+            <p class="quick-check-copy">口・まばたき・髪揺れ・全身モーションを順番に再生します。</p>
+            <div class="demo-row">
+              <button id="demo-start" type="button">動きを自動チェック</button>
+              <button id="demo-stop" type="button">停止</button>
+            </div>
+          </div>
+          <div class="controls" aria-label="リグ操作パネル">
+          <div class="field">
+            <label class="field-head" for="eye-control"><span>目の開閉</span><output id="eye-value">100%</output></label>
+            <input id="eye-control" type="range" min="0" max="100" value="100" />
+          </div>
+          <div class="field toggle-control">
+            <div class="field-head"><span>自動まばたき</span><output id="blink-value">ON</output></div>
+            <div class="toggle-row">
+              <button id="blink-toggle" type="button" aria-label="自動まばたき" aria-pressed="true">ON</button>
+              <span class="toggle-note">一定間隔で自然にまばたきします。モーション種別とは独立して切り替えられます。</span>
+            </div>
+          </div>
+          <div class="field">
+            <label class="field-head" for="mouth-control"><span>口の開閉</span><output id="mouth-value">0%</output></label>
+            <input id="mouth-control" type="range" min="0" max="100" value="0" />
+          </div>
+          <div class="field">
+            <label class="field-head" for="zoom-control"><span>アバターの拡大縮小</span><output id="zoom-value">90%</output></label>
+            <div class="zoom-row">
+              <input id="zoom-control" type="range" min="50" max="200" step="5" value="90" />
+              <button id="view-reset" type="button">位置と倍率をリセット</button>
+            </div>
+          </div>
+          <div class="field">
+            <div class="field-head"><span>モーション</span></div>
+            <div class="button-row">
+              <button type="button" data-mode="static" aria-pressed="true">静止</button>
+              <button type="button" data-mode="physics" aria-pressed="false">髪揺れ</button>
+              <button type="button" data-mode="idle-physics" aria-pressed="false">全身＋髪</button>
+            </div>
+            <p class="mode-note">自動まばたきは、どのモーションでも上の設定に従います。</p>
+          </div>
+          <div class="field tuning-panel">
+            <div class="field-head"><span>動きの強さ</span><output id="tuning-preset-value">標準</output></div>
+            <div class="preset-row" aria-label="モーションプリセット">
+              <button type="button" data-motion-preset="calm" aria-pressed="false">おだやか</button>
+              <button type="button" data-motion-preset="standard" aria-pressed="true">標準</button>
+              <button type="button" data-motion-preset="active" aria-pressed="false">よく動く</button>
+            </div>
+            <details class="tuning-details">
+              <summary>動きの強さを細かく調整</summary>
+              <div class="tuning-grid">
+                <label class="tuning-item" for="motion-intensity">
+                  <span class="field-head"><span>全体の強度</span><output id="motion-intensity-value">100%</output></span>
+                  <input id="motion-intensity" type="range" min="0" max="150" step="5" value="100" />
+                </label>
+                <label class="tuning-item" for="idle-scale">
+                  <span class="field-head"><span>全身アイドル</span><output id="idle-scale-value">100%</output></span>
+                  <input id="idle-scale" type="range" min="0" max="150" step="5" value="100" />
+                </label>
+                <label class="tuning-item" for="breath-scale">
+                  <span class="field-head"><span>呼吸</span><output id="breath-scale-value">100%</output></span>
+                  <input id="breath-scale" type="range" min="0" max="150" step="5" value="100" />
+                </label>
+                <label class="tuning-item" for="hair-wind-scale">
+                  <span class="field-head"><span>髪に当たる風</span><output id="hair-wind-scale-value">100%</output></span>
+                  <input id="hair-wind-scale" type="range" min="0" max="150" step="5" value="100" />
+                </label>
+                <label class="tuning-item" for="hair-amplitude-scale">
+                  <span class="field-head"><span>髪の揺れ幅</span><output id="hair-amplitude-scale-value">100%</output></span>
+                  <input id="hair-amplitude-scale" type="range" min="0" max="150" step="5" value="100" />
+                </label>
+                <label class="tuning-item" for="hair-softness-scale">
+                  <span class="field-head"><span>髪の柔らかさ</span><output id="hair-softness-scale-value">100%</output></span>
+                  <input id="hair-softness-scale" type="range" min="0" max="120" step="5" value="100" />
+                </label>
+                <label class="tuning-item" for="drag-scale">
+                  <span class="field-head"><span>移動時の慣性</span><output id="drag-scale-value">100%</output></span>
+                  <input id="drag-scale" type="range" min="0" max="150" step="5" value="100" />
+                </label>
+              </div>
+            </details>
+            <p class="tuning-note">プリセットを選んだあと、必要な項目だけ微調整できます。0%でその成分を止められます。</p>
+          </div>
+          <details id="advanced-parameters" class="advanced-panel">
+            <summary><span>細かい設定</span><span class="parameter-count">32項目</span></summary>
+            <div class="advanced-content">
+              <div class="advanced-intro">
+                <p>顔や体の向き、目・口・髪の動き方を項目ごとに調整できます。目と口の開閉は上の操作が優先されます。</p>
+                <button id="advanced-reset" type="button">最初の値に戻す</button>
+              </div>
+              <div id="advanced-parameter-groups"></div>
+            </div>
+          </details>
+          </div>
+          <pre id="report"></pre>
+        </aside>
+      </div>
+    </main>
+    <script src="./rigger.js"></script>
+    <script type="module" src="./src/main.ts"></script>
+  </body>
+</html>

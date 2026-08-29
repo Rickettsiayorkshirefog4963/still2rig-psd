@@ -1,0 +1,4 @@
+interface:
+  display_name: "Still2Rig PSD"
+  short_description: "Turn anime stills into QA-gated layered PSDs"
+  default_prompt: "Use $still2rig-psd to convert this static anime image into a verified layered PSD through my approved Colab session."

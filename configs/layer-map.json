@@ -1,0 +1,34 @@
+{
+  "schemaVersion": 1,
+  "description": "Back-to-front PSD order for the Anime2.5-compatible contract.",
+  "layers": [
+    { "source": "back hair.png", "target": "back hair", "required": false },
+    { "source": "bottomwear.png", "target": "bottomwear", "required": false },
+    { "source": "handwear.png", "target": "handwear", "required": false },
+    { "source": "topwear.png", "target": "topwear", "required": false },
+    { "source": "neck.png", "target": "neck", "required": false },
+    { "source": "ears.png", "target": "ears", "required": false },
+    { "source": "face.png", "target": "face", "required": true },
+    { "source": "eyewhite.png", "target": "eyewhite", "required": true },
+    { "source": "irides.png", "target": "irides", "required": true },
+    { "source": "eyelash.png", "target": "eyelash", "required": false },
+    { "source": "eyebrow.png", "target": "eyebrow", "required": false },
+    { "source": "nose.png", "target": "nose", "required": false },
+    { "source": "facedetail.png", "target": "facedetail", "required": false },
+    { "source": "mouth.png", "target": "mouth_close", "required": true },
+    { "source": "mouth_close.png", "target": "mouth_close", "required": false, "override": true },
+    { "source": "mouth_open.png", "target": "mouth_open", "requiredForProduction": true },
+    { "source": "eye_close.png", "target": "eye_close", "requiredForProduction": true },
+    { "source": "front hair.png", "target": "front hair", "required": false },
+    { "source": "headwear.png", "target": "headwear", "required": false }
+  ],
+  "drop": [
+    "*_depth.png",
+    "src_img.png",
+    "src_head.png",
+    "head.png",
+    "reconstruction.png",
+    "objects.png",
+    "wings.png"
+  ]
+}
