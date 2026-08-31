@@ -3,11 +3,12 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>Still2Rig PSD Motion Preview</title>
+    <title>Still2Rig PSDの確認と修正</title>
     <style>
       :root { color-scheme: dark; font-family: Inter, ui-sans-serif, system-ui, sans-serif; }
       * { box-sizing: border-box; }
       body { margin: 0; min-height: 100vh; overflow: hidden; background: #10131b; color: #f5f7ff; }
+      [hidden] { display: none !important; }
       main { height: 100vh; min-height: 0; display: grid; grid-template-rows: auto minmax(0, 1fr); background: radial-gradient(circle at 26% 18%, #303a52, #11141d 62%); }
       .app-header { position: relative; z-index: 10; isolation: isolate; transform: translateZ(0); display: grid; grid-template-columns: 300px minmax(240px, 1fr) minmax(440px, 560px); gap: 24px; align-items: center; padding: 16px 24px; border-bottom: 1px solid #3c4355; background: #0f131c; box-shadow: 0 12px 32px rgb(0 0 0 / 16%); }
       .brand-block { min-width: 0; }
@@ -37,11 +38,37 @@
       .workspace { min-height: 0; display: grid; grid-template-columns: minmax(0, 1fr) minmax(360px, 400px); }
       .stage { position: relative; min-width: 0; min-height: 0; display: flex; flex-direction: column; align-items: center; justify-content: flex-start; gap: 11px; padding: 24px 30px 20px; overflow: hidden; }
       canvas { width: min(700px, 100%); max-height: calc(100vh - 184px); height: auto; aspect-ratio: 1; touch-action: none; user-select: none; cursor: grab; object-fit: contain; background: repeating-conic-gradient(#3a4050 0 25%, #252a36 0 50%) 50% / 24px 24px; border: 1px solid #667089; border-radius: 18px; box-shadow: 0 24px 60px rgb(0 0 0 / 35%); }
+      body[data-workspace-mode='layers'] canvas { cursor: pointer; }
       body[data-avatar-dragging='true'] canvas { cursor: grabbing; }
       body[data-avatar-ready='false'] canvas { cursor: default; }
       body[data-qa-background='solid'] canvas { background: #00ff00; }
       .canvas-hint { margin: 0; color: #9ba7c0; font-size: 11px; line-height: 1.4; text-align: center; opacity: 0; transition: opacity 120ms ease; }
       body[data-avatar-ready='true'] .canvas-hint { opacity: 1; }
+      .layer-canvas-hint { display: none; color: #b9edff; font-weight: 750; }
+      body[data-workspace-mode='layers'] .motion-canvas-hint { display: none; }
+      body[data-workspace-mode='layers'] .layer-canvas-hint { display: inline; }
+      .preview-badges { position: absolute; z-index: 3; top: 38px; left: max(44px, calc(50% - 338px)); display: flex; flex-wrap: wrap; gap: 8px; pointer-events: none; }
+      .preview-badge { padding: 7px 10px; border: 1px solid rgb(255 255 255 / 24%); border-radius: 999px; color: #10202a; background: #7de1ff; box-shadow: 0 8px 22px rgb(0 0 0 / 26%); font-size: 11px; font-weight: 800; }
+      #selected-part-badge { color: #f7f2ff; background: rgb(48 37 78 / 92%); }
+      .canvas-selection-marker { position: absolute; z-index: 4; width: 38px; height: 38px; pointer-events: none; transform: translate(-50%, -50%); border: 3px solid #7de1ff; border-radius: 50%; box-shadow: 0 0 0 4px rgb(11 19 29 / 72%), 0 0 24px #67d8ff; animation: selection-pop 180ms ease-out; }
+      .canvas-selection-marker::before, .canvas-selection-marker::after { content: ''; position: absolute; top: 50%; left: 50%; background: #fff; transform: translate(-50%, -50%); }
+      .canvas-selection-marker::before { width: 12px; height: 2px; }
+      .canvas-selection-marker::after { width: 2px; height: 12px; }
+      @keyframes selection-pop { from { opacity: 0; transform: translate(-50%, -50%) scale(.65); } }
+      .canvas-pick-menu { position: absolute; z-index: 6; display: grid; gap: 8px; width: min(280px, calc(100% - 32px)); padding: 11px; border: 1px solid #6b7f9f; border-radius: 12px; color: #eff7ff; background: rgb(15 22 34 / 96%); box-shadow: 0 16px 42px rgb(0 0 0 / 46%); }
+      .canvas-pick-menu strong { font-size: 12px; }
+      .canvas-pick-menu p { margin: 0; color: #b8c7dc; font-size: 11px; line-height: 1.45; }
+      .canvas-pick-options { display: flex; flex-wrap: wrap; gap: 6px; }
+      .canvas-pick-options button { min-height: 44px; padding: 8px 10px; }
+      .canvas-pick-options button[aria-pressed='true'] { box-shadow: 0 0 0 2px #fff; }
+      .layer-processing-overlay { position: absolute; z-index: 7; display: grid; place-items: center; overflow: hidden; visibility: hidden; opacity: 0; pointer-events: none; border: 1px solid rgb(125 225 255 / 42%); border-radius: 18px; background: rgb(10 16 27 / 78%); backdrop-filter: blur(4px); }
+      body[data-layer-processing='true'] .layer-processing-overlay { visibility: visible; pointer-events: auto; animation: layer-processing-reveal 140ms ease 180ms forwards; }
+      @keyframes layer-processing-reveal { to { opacity: 1; } }
+      .layer-processing-card { display: grid; justify-items: center; gap: 10px; width: min(340px, calc(100% - 36px)); padding: 24px 26px; text-align: center; border: 1px solid #526782; border-radius: 15px; background: rgb(18 27 42 / 94%); box-shadow: 0 20px 54px rgb(0 0 0 / 38%); }
+      .layer-processing-spinner { width: 38px; height: 38px; border: 4px solid rgb(125 225 255 / 20%); border-top-color: #7de1ff; border-radius: 50%; animation: layer-processing-spin 720ms linear infinite; }
+      @keyframes layer-processing-spin { to { transform: rotate(360deg); } }
+      #layer-processing-title { font-size: 16px; line-height: 1.35; }
+      #layer-processing-detail { color: #b9c8dc; font-size: 11px; line-height: 1.55; }
       .drop-overlay { position: absolute; z-index: 5; inset: 20px; display: grid; place-items: center; pointer-events: none; opacity: 0; transform: scale(.985); border: 2px dashed #72d9ff; border-radius: 20px; background: rgb(10 18 31 / 88%); backdrop-filter: blur(7px); transition: opacity 120ms ease, transform 120ms ease; }
       body[data-file-dragging='true'] .drop-overlay { opacity: 1; transform: scale(1); }
       .drop-message { display: grid; gap: 8px; max-width: 390px; padding: 28px 34px; text-align: center; border: 1px solid rgb(114 217 255 / 45%); border-radius: 18px; background: rgb(19 29 46 / 88%); box-shadow: 0 18px 55px rgb(0 0 0 / 38%); }
@@ -55,6 +82,70 @@
       body[data-file-load-state='loading'] .empty-state { opacity: 0; pointer-events: none; }
       .control-panel { min-height: 0; padding: 22px 22px 42px; border-left: 1px solid #3c4355; background: rgb(17 21 31 / 91%); overflow-y: auto; }
       .panel-title { margin: 0 0 14px; font-size: 14px; font-weight: 750; }
+      .workspace-mode-tabs { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; margin-bottom: 18px; padding: 5px; border: 1px solid #414c63; border-radius: 12px; background: #111722; }
+      .workspace-mode-tabs button { min-height: 44px; border: 0; background: transparent; }
+      .workspace-mode-tabs button[aria-selected='true'] { color: #0d1922; background: #7bdfff; box-shadow: 0 5px 18px rgb(71 200 245 / 18%); }
+      .layer-edit-intro { margin: -4px 0 14px; color: #aeb8d1; font-size: 12px; line-height: 1.55; }
+      .layer-selection-step { display: flex; gap: 8px; align-items: center; margin-bottom: 10px; color: #dff7ff; font-size: 12px; font-weight: 750; }
+      .layer-selection-step span { display: grid; flex: none; place-items: center; width: 24px; height: 24px; border-radius: 50%; color: #10202a; background: #7de1ff; }
+      .layer-editor-unavailable { padding: 14px; border: 1px solid #675b42; border-radius: 11px; color: #f2ddb0; background: rgb(90 65 26 / 24%); font-size: 12px; line-height: 1.55; }
+      .layer-editor-content { display: grid; gap: 14px; }
+      .common-fixes { display: grid; gap: 10px; padding: 12px; border: 1px solid #46516a; border-radius: 11px; background: linear-gradient(135deg, rgb(60 84 118 / 32%), rgb(31 38 54 / 55%)); }
+      .common-fixes h3, .selected-layer-card h3 { margin: 0; font-size: 12px; }
+      .common-fix-row { display: grid; gap: 7px; }
+      .common-fix-label { color: #d8deed; font-size: 12px; font-weight: 700; }
+      .common-fix-actions { display: grid; grid-template-columns: 1fr 1fr; gap: 7px; }
+      .selected-layer-card { display: grid; gap: 10px; padding: 12px; border: 1px solid #596782; border-radius: 11px; background: rgb(31 38 54 / 94%); }
+      .selected-layer-card[data-has-selection='false'] { border-style: dashed; }
+      #selected-layer-name { color: #86e4ff; font-size: 17px; font-weight: 800; }
+      .selected-layer-help { margin: -4px 0 0; color: #9dabc2; font-size: 11px; line-height: 1.45; }
+      .selected-layer-actions { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+      .selected-layer-actions button { min-height: 48px; }
+      #open-layer-list { min-height: 40px; color: #b9edff; background: transparent; }
+      #layer-edit-status { min-height: 1.5em; margin: 0; color: #b9c8dd; font-size: 12px; line-height: 1.5; }
+      #layer-edit-status[data-state='success'] { padding: 9px 10px; color: #b9f6d8; border: 1px solid #3d725b; border-radius: 9px; background: rgb(35 104 73 / 22%); }
+      #before-after-toggle { width: 100%; border-color: #6e7d9d; }
+      #before-after-toggle[aria-pressed='true'] { color: #20180c; background: #ffd27c; border-color: #ffd27c; }
+      .layer-order-section { display: grid; gap: 7px; }
+      .layer-order-section > summary { display: flex; justify-content: space-between; gap: 10px; align-items: center; min-height: 44px; padding: 10px 11px; border: 1px solid #495570; border-radius: 10px; color: #dce5f5; background: #171e2b; font-size: 12px; font-weight: 750; cursor: pointer; list-style: none; }
+      .layer-order-section > summary::-webkit-details-marker { display: none; }
+      .layer-order-section > summary::after { content: '開く'; color: #7de1ff; font-size: 10px; }
+      .layer-order-section[open] > summary::after { content: '閉じる'; }
+      .layer-order-summary-copy { display: grid; gap: 2px; }
+      .layer-order-summary-copy span { color: #8f9ab7; font-size: 10px; font-weight: 500; }
+      .layer-order-content { display: grid; gap: 7px; padding-top: 7px; }
+      .layer-order-instruction { display: flex; gap: 7px; align-items: flex-start; margin: 0; padding: 9px 10px; border: 1px solid #3f536b; border-radius: 9px; color: #c8eefd; background: rgb(43 74 96 / 28%); font-size: 10px; line-height: 1.5; }
+      .layer-order-instruction::before { content: '⠿'; flex: none; color: #7de1ff; font-size: 16px; line-height: 1; letter-spacing: -3px; }
+      .layer-order-touch-notice { margin: 0; padding: 9px 10px; border: 1px solid #756446; border-radius: 9px; color: #f5dfb3; background: rgb(91 65 25 / 32%); font-size: 10px; line-height: 1.5; }
+      .layer-depth-label { display: flex; align-items: center; gap: 7px; color: #8f9ab7; font-size: 10px; font-weight: 700; }
+      .layer-depth-label::after { content: ''; flex: 1; height: 1px; background: #3a4458; }
+      .layer-depth-label.back::after { order: -1; }
+      #layer-order-list { display: grid; gap: 6px; margin: 0; padding: 0; list-style: none; }
+      .layer-order-item { display: grid; grid-template-columns: 34px minmax(0, 1fr) auto; gap: 9px; align-items: center; min-height: 52px; padding: 7px 8px 7px 9px; border: 1px solid #3f4960; border-radius: 10px; color: #e6ecf8; background: #171d2a; cursor: pointer; transition: border-color 120ms ease, background 120ms ease, box-shadow 120ms ease, opacity 120ms ease, transform 120ms ease; }
+      .layer-order-item:hover { background: #20283a; }
+      .layer-order-item[aria-selected='true'] { border-color: #7de1ff; background: rgb(42 81 105 / 62%); box-shadow: inset 3px 0 #7de1ff; }
+      .layer-order-item[aria-grabbed='true'] { opacity: .45; transform: scale(.985); border-color: #7de1ff; border-style: dashed; box-shadow: 0 10px 24px rgb(0 0 0 / 26%); }
+      .layer-symbol { display: grid; place-items: center; width: 34px; height: 34px; border-radius: 9px; color: #aeeeff; background: #263247; font-size: 16px; }
+      .layer-item-copy { display: grid; gap: 2px; min-width: 0; text-align: left; }
+      .layer-item-copy strong { overflow: hidden; font-size: 12px; text-overflow: ellipsis; white-space: nowrap; }
+      .layer-item-copy span { color: #9ba7c0; font-size: 9px; }
+      .layer-drag-handle { display: grid; place-items: center; width: 34px; height: 36px; border: 1px solid transparent; border-radius: 8px; color: #94a4c2; font-size: 20px; line-height: 1; letter-spacing: -3px; cursor: grab; user-select: none; }
+      .layer-drag-handle:hover { color: #c8f2ff; border-color: #50667f; background: #28364b; }
+      .layer-drag-handle:active { cursor: grabbing; }
+      .layer-drag-handle[draggable='false'] { cursor: not-allowed; opacity: .45; }
+      .layer-drop-indicator { position: relative; display: grid; place-items: center; height: 30px; pointer-events: none; color: #bff2ff; font-size: 10px; font-weight: 800; }
+      .layer-drop-indicator::before { content: ''; position: absolute; top: 50%; right: 0; left: 0; height: 3px; border-radius: 999px; background: #70ddff; box-shadow: 0 0 12px rgb(112 221 255 / 70%); transform: translateY(-50%); }
+      .layer-drop-indicator span { position: relative; z-index: 1; padding: 3px 9px; border: 1px solid #70ddff; border-radius: 999px; color: #10202a; background: #9ae8ff; box-shadow: 0 4px 12px rgb(0 0 0 / 32%); }
+      .layer-order-drag-preview { position: fixed; top: -1000px; left: -1000px; z-index: 100; width: 320px; opacity: .94; transform: rotate(-1deg) scale(1.02); border-color: #7de1ff; box-shadow: 0 18px 38px rgb(0 0 0 / 42%); pointer-events: none; }
+      .layer-history-actions { display: grid; grid-template-columns: 1fr 1.35fr; gap: 8px; }
+      .layer-warning { padding: 11px; border: 1px solid #6b5b38; border-radius: 10px; color: #f2dca7; background: rgb(99 70 22 / 22%); font-size: 11px; line-height: 1.5; }
+      .layer-save-bar { display: grid; gap: 9px; padding: 13px; border: 1px solid #4c5b75; border-radius: 12px; background: #151c29; }
+      .layer-save-note { margin: 0; color: #b9c6dc; font-size: 11px; line-height: 1.5; }
+      .layer-save-label { color: #8f9ab7; font-size: 10px; }
+      .layer-save-file { color: #7fdfff; overflow-wrap: anywhere; font-size: 12px; line-height: 1.45; }
+      #save-layer-edit { min-height: 48px; color: #0f1a22; background: #76ddff; border-color: #76ddff; font-size: 13px; font-weight: 800; }
+      #save-layer-edit:disabled { color: #9ba7c0; background: #293143; border-color: #414b61; }
+      body[data-comparison-view='original'] #preview-mode-badge { color: #2a1d08; background: #ffd27c; }
       pre { display: none; }
       .controls { display: grid; gap: 14px; }
       .field { display: grid; gap: 7px; margin: 0; }
@@ -128,7 +219,19 @@
         canvas { width: min(100%, 520px); max-height: none; touch-action: pan-y; }
         .empty-state { width: min(340px, calc(100% - 48px)); }
         .control-panel { padding: 22px 16px 38px; border-top: 1px solid #3c4355; border-left: 0; overflow: visible; }
+        .preview-badges { top: 30px; left: 26px; }
+        body[data-workspace-mode='layers'] .stage { position: sticky; top: 0; z-index: 4; min-height: 42svh; padding-bottom: 10px; background: #141925; }
+        body[data-workspace-mode='layers'] .stage canvas { width: min(42svh, calc(100vw - 32px)); }
+        body[data-workspace-mode='layers'] .canvas-hint { display: block; max-width: 330px; }
+        body[data-workspace-mode='layers'] .canvas-pick-menu { right: 16px; bottom: 14px; left: 16px !important; top: auto !important; width: auto; }
+        .layer-processing-card { gap: 8px; padding: 18px 16px; }
+        .layer-processing-spinner { width: 34px; height: 34px; }
+        #layer-processing-title { font-size: 14px; }
         button, .file-button { min-height: 44px; }
+      }
+      @media (prefers-reduced-motion: reduce) {
+        body[data-layer-processing='true'] .layer-processing-overlay { animation-duration: 1ms; }
+        .layer-processing-spinner { animation-duration: 1.4s; }
       }
     </style>
   </head>
@@ -139,7 +242,7 @@
           <div class="brand-line">
             <span class="label">Still2Rig PSD Preview</span>
           </div>
-          <h1>PSDモーションプレビュー</h1>
+          <h1>PSDの確認と修正</h1>
           <p id="model-name">PSD未選択</p>
         </div>
 
@@ -170,7 +273,24 @@
       <div class="workspace">
         <section class="stage" aria-label="PSDプレビュー">
           <canvas id="rig-canvas" width="1280" height="1280" aria-label="Still2Rig PSD motion preview canvas"></canvas>
-          <p class="canvas-hint">ドラッグで移動・ホイールで拡大縮小</p>
+          <div id="layer-processing-overlay" class="layer-processing-overlay" role="status" aria-live="polite" aria-hidden="true">
+            <div class="layer-processing-card">
+              <div class="layer-processing-spinner" aria-hidden="true"></div>
+              <strong id="layer-processing-title">重なりを変更しています</strong>
+              <span id="layer-processing-detail">PSDを組み直しています。数秒かかることがあります。</span>
+            </div>
+          </div>
+          <div class="preview-badges" aria-live="polite">
+            <span id="preview-mode-badge" class="preview-badge" hidden>修正後</span>
+            <span id="selected-part-badge" class="preview-badge" hidden></span>
+          </div>
+          <div id="canvas-selection-marker" class="canvas-selection-marker" hidden></div>
+          <div id="canvas-pick-menu" class="canvas-pick-menu" role="group" aria-labelledby="canvas-pick-title" hidden>
+            <strong id="canvas-pick-title"></strong>
+            <p id="canvas-pick-copy"></p>
+            <div id="canvas-pick-options" class="canvas-pick-options"></div>
+          </div>
+          <p class="canvas-hint"><span class="motion-canvas-hint">ドラッグで移動・ホイールで拡大縮小</span><span class="layer-canvas-hint">人物の直したい部分をクリックして選択</span></p>
           <div class="empty-state">
             <strong>PSDを読み込んでください</strong>
             <span>上の一覧から選ぶか、手元のPSDを開いて動きを確認できます。</span>
@@ -185,6 +305,11 @@
         </section>
 
         <aside class="control-panel">
+          <div class="workspace-mode-tabs" role="tablist" aria-label="作業を選択">
+            <button id="motion-tab" type="button" role="tab" aria-selected="true" aria-controls="motion-panel">動きを確認</button>
+            <button id="layer-edit-tab" type="button" role="tab" aria-selected="false" aria-controls="layer-edit-panel" disabled>重なりを直す</button>
+          </div>
+          <section id="motion-panel" role="tabpanel" aria-labelledby="motion-tab">
           <h2 class="panel-title">動作を確認</h2>
           <div class="quick-check">
             <div class="field-head"><span>最初にまとめて確認</span></div>
@@ -280,6 +405,64 @@
           </details>
           </div>
           <pre id="report"></pre>
+          </section>
+
+          <section id="layer-edit-panel" role="tabpanel" aria-labelledby="layer-edit-tab" hidden>
+            <h2 class="panel-title">重なりを直す</h2>
+            <p class="layer-edit-intro">前後がおかしい部分を選び、「手前へ」「奥へ」で見た目を調整します。</p>
+            <div id="layer-editor-unavailable" class="layer-editor-unavailable" hidden></div>
+            <div id="layer-editor-content" class="layer-editor-content" hidden>
+              <div class="layer-selection-step"><span>1</span>人物の直したい部分をクリックしてください</div>
+              <section id="selected-layer-card" class="selected-layer-card" data-has-selection="false" aria-labelledby="selected-layer-title">
+                <h3 id="selected-layer-title">2　選んだ部分を前後に動かす</h3>
+                <div id="selected-layer-name">まだ選んでいません</div>
+                <p id="selected-layer-help" class="selected-layer-help">左の人物をクリックすると、ここに部分の名前が表示されます。</p>
+                <div class="selected-layer-actions">
+                  <button id="move-layer-front" type="button">この部分を手前へ</button>
+                  <button id="move-layer-back" type="button">この部分を奥へ</button>
+                </div>
+                <button id="open-layer-list" type="button" aria-controls="layer-order-details" aria-expanded="false">人物から選びにくい場合：一覧から選ぶ</button>
+                <p id="layer-edit-status" role="status" aria-live="polite"></p>
+              </section>
+
+              <section id="common-fixes" class="common-fixes" aria-labelledby="common-fixes-title">
+                <h3 id="common-fixes-title">よくある直し方</h3>
+                <div id="common-fixes-list"></div>
+              </section>
+
+              <button id="before-after-toggle" type="button" aria-pressed="false">元の見た目を表示</button>
+
+              <section class="layer-save-bar" aria-label="修正版の保存">
+                <p class="layer-save-note">元のPSDは変更しません。修正版を新しいファイルとして保存します。</p>
+                <span class="layer-save-label">保存するファイル</span>
+                <div id="layer-save-file" class="layer-save-file"></div>
+                <button id="save-layer-edit" type="button" disabled>修正版を保存</button>
+              </section>
+
+              <details id="layer-order-details" class="layer-order-section">
+                <summary>
+                  <span class="layer-order-summary-copy">
+                    <span id="layer-order-title">並びを細かく直す（<span id="layer-order-count">0</span>個）</span>
+                    <span>PCでは右端の点々をドラッグして並べ替えられます。</span>
+                  </span>
+                </summary>
+                <div class="layer-order-content">
+                  <p class="layer-order-instruction">右端の点々をドラッグし、移動したい場所で離します（PCのみ）。</p>
+                  <p id="layer-order-touch-notice" class="layer-order-touch-notice" role="status" aria-live="polite" hidden>タッチ操作での並べ替えには対応していません。PCのマウスで操作してください。</p>
+                  <div class="layer-depth-label">手前</div>
+                  <ol id="layer-order-list" aria-label="上ほど手前、下ほど奥"></ol>
+                  <div class="layer-depth-label back">奥</div>
+                </div>
+              </details>
+
+              <div class="layer-history-actions">
+                <button id="undo-layer-edit" type="button">1つ前に戻す</button>
+                <button id="reset-layer-edit" type="button">今回の変更をすべて取り消す</button>
+              </div>
+              <div id="layer-warning" class="layer-warning" hidden></div>
+            </div>
+            <div id="layer-edit-live-region" class="visually-hidden" aria-live="polite"></div>
+          </section>
         </aside>
       </div>
     </main>

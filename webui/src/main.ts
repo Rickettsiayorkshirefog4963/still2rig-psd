@@ -15,9 +15,17 @@ import {
   type PsdMotionParameters,
   type PsdMotionProfile,
 } from './psdMotionProfile';
+import {
+  buildReorderedPsd,
+  editedPsdFileName,
+  inspectEditablePsd,
+  layerLabel,
+  type EditablePsdLayer,
+} from './psdLayerEditor';
 
 type QaMode = 'static' | 'physics' | 'idle-physics';
 type MotionPreset = 'calm' | 'standard' | 'active' | 'custom';
+type WorkspaceMode = 'motion' | 'layers';
 type UiMotionTuning = Anime25MotionTuning & { intensity: number };
 
 interface GeneratedPsd {
@@ -51,6 +59,17 @@ interface RigQaApi {
   getProfileParameters: () => PsdMotionParameters;
   resetProfileParameters: () => void;
   getAverageFps: () => number;
+  setWorkspaceMode: (mode: WorkspaceMode) => void;
+  setLayerProcessingPreview: (active: boolean) => Promise<void>;
+  getLayerEditorState: () => {
+    mode: WorkspaceMode;
+    originalOrder: string[];
+    currentOrder: string[];
+    selectedLayer: string | null;
+    layerFocus: string | null;
+    dirty: boolean;
+    showingOriginal: boolean;
+  };
 }
 
 declare global {
@@ -65,6 +84,7 @@ function requireElement<T extends Element>(selector: string): T {
 
 const canvas = requireElement<HTMLCanvasElement>('#rig-canvas');
 const stage = requireElement<HTMLElement>('.stage');
+const controlPanel = requireElement<HTMLElement>('.control-panel');
 const modelNode = requireElement<HTMLElement>('#model-name');
 const phaseNode = requireElement<HTMLElement>('#phase');
 const detailNode = requireElement<HTMLElement>('#detail');
@@ -77,6 +97,42 @@ const generatedPsdRefresh = requireElement<HTMLButtonElement>('#generated-psd-re
 const generatedPsdNote = requireElement<HTMLElement>('#generated-psd-note');
 const psdFileInput = requireElement<HTMLInputElement>('#psd-file-input');
 const dropOverlay = requireElement<HTMLElement>('#drop-overlay');
+const motionTab = requireElement<HTMLButtonElement>('#motion-tab');
+const layerEditTab = requireElement<HTMLButtonElement>('#layer-edit-tab');
+const motionPanel = requireElement<HTMLElement>('#motion-panel');
+const layerEditPanel = requireElement<HTMLElement>('#layer-edit-panel');
+const layerEditorUnavailable = requireElement<HTMLElement>('#layer-editor-unavailable');
+const layerEditorContent = requireElement<HTMLElement>('#layer-editor-content');
+const commonFixes = requireElement<HTMLElement>('#common-fixes');
+const commonFixesList = requireElement<HTMLElement>('#common-fixes-list');
+const selectedLayerCard = requireElement<HTMLElement>('#selected-layer-card');
+const selectedLayerName = requireElement<HTMLElement>('#selected-layer-name');
+const selectedLayerHelp = requireElement<HTMLElement>('#selected-layer-help');
+const moveLayerFront = requireElement<HTMLButtonElement>('#move-layer-front');
+const moveLayerBack = requireElement<HTMLButtonElement>('#move-layer-back');
+const openLayerList = requireElement<HTMLButtonElement>('#open-layer-list');
+const beforeAfterToggle = requireElement<HTMLButtonElement>('#before-after-toggle');
+const layerOrderDetails = requireElement<HTMLDetailsElement>('#layer-order-details');
+const layerOrderList = requireElement<HTMLOListElement>('#layer-order-list');
+const layerOrderCount = requireElement<HTMLElement>('#layer-order-count');
+const layerOrderTouchNotice = requireElement<HTMLElement>('#layer-order-touch-notice');
+const undoLayerEdit = requireElement<HTMLButtonElement>('#undo-layer-edit');
+const resetLayerEdit = requireElement<HTMLButtonElement>('#reset-layer-edit');
+const layerWarning = requireElement<HTMLElement>('#layer-warning');
+const layerSaveFile = requireElement<HTMLElement>('#layer-save-file');
+const saveLayerEdit = requireElement<HTMLButtonElement>('#save-layer-edit');
+const layerEditStatus = requireElement<HTMLElement>('#layer-edit-status');
+const layerEditLiveRegion = requireElement<HTMLElement>('#layer-edit-live-region');
+const previewModeBadge = requireElement<HTMLElement>('#preview-mode-badge');
+const selectedPartBadge = requireElement<HTMLElement>('#selected-part-badge');
+const canvasSelectionMarker = requireElement<HTMLElement>('#canvas-selection-marker');
+const canvasPickMenu = requireElement<HTMLElement>('#canvas-pick-menu');
+const canvasPickTitle = requireElement<HTMLElement>('#canvas-pick-title');
+const canvasPickCopy = requireElement<HTMLElement>('#canvas-pick-copy');
+const canvasPickOptions = requireElement<HTMLElement>('#canvas-pick-options');
+const layerProcessingOverlay = requireElement<HTMLElement>('#layer-processing-overlay');
+const layerProcessingTitle = requireElement<HTMLElement>('#layer-processing-title');
+const layerProcessingDetail = requireElement<HTMLElement>('#layer-processing-detail');
 const eyeControl = requireElement<HTMLInputElement>('#eye-control');
 const mouthControl = requireElement<HTMLInputElement>('#mouth-control');
 const eyeValue = requireElement<HTMLOutputElement>('#eye-value');
@@ -132,7 +188,41 @@ let viewOffsetX = 0;
 let viewOffsetY = 0;
 const DEFAULT_VIEW_SCALE = 0.9;
 let viewScale = DEFAULT_VIEW_SCALE;
-let dragState: { pointerId: number; clientX: number; clientY: number; time: number } | null = null;
+let dragState: {
+  pointerId: number;
+  pointerType: string;
+  startClientX: number;
+  startClientY: number;
+  clientX: number;
+  clientY: number;
+  time: number;
+  moved: boolean;
+} | null = null;
+let workspaceMode: WorkspaceMode = 'motion';
+let sourcePsdBuffer: ArrayBuffer | null = null;
+let sourcePsdFileName = '';
+let editableLayers: EditablePsdLayer[] = [];
+let originalLayerOrder: string[] = [];
+let currentLayerOrder: string[] = [];
+let savedLayerOrderSignature = '';
+let selectedLayerId: string | null = null;
+let layerEditHistory: string[][] = [];
+let editedPreviewBuffer: ArrayBuffer | null = null;
+let showingOriginal = false;
+let layerEditBusy = false;
+let layerFocusTimer: number | null = null;
+let layerProcessingActive = false;
+let layerProcessingStartedAt = 0;
+let draggedLayerId: string | null = null;
+let layerTouchNoticeTimer: number | null = null;
+let activeGeneratedPsdId = '';
+
+const layerDropIndicator = document.createElement('li');
+layerDropIndicator.className = 'layer-drop-indicator';
+layerDropIndicator.setAttribute('aria-hidden', 'true');
+const layerDropIndicatorLabel = document.createElement('span');
+layerDropIndicatorLabel.textContent = 'ここに移動';
+layerDropIndicator.append(layerDropIndicatorLabel);
 
 function delay(ms: number): Promise<void> {
   return new Promise((resolve) => window.setTimeout(resolve, ms));
@@ -362,6 +452,718 @@ function clampValue(value: number, min: number, max: number): number {
   return Math.max(min, Math.min(max, value));
 }
 
+function layerOrderSignature(order: readonly string[]): string {
+  return order.join('\n');
+}
+
+function hasUnsavedLayerChanges(): boolean {
+  return (
+    currentLayerOrder.length > 0 &&
+    layerOrderSignature(currentLayerOrder) !== savedLayerOrderSignature
+  );
+}
+
+function selectedEditableLayer(): EditablePsdLayer | null {
+  return editableLayers.find((layer) => layer.id === selectedLayerId) ?? null;
+}
+
+function editableLayerByName(name: string): EditablePsdLayer | null {
+  const normalized = name.toLowerCase();
+  return (
+    editableLayers.find((layer) => layer.name.toLowerCase() === normalized) ?? null
+  );
+}
+
+function layerSymbol(name: string): string {
+  const normalized = name.toLowerCase();
+  if (normalized.includes('hair')) return '⌁';
+  if (normalized.includes('eye') || normalized === 'irides') return '◉';
+  if (normalized.includes('mouth')) return '◡';
+  if (normalized === 'handwear') return '✦';
+  if (normalized.includes('wear')) return '◇';
+  if (normalized === 'face') return '○';
+  return '◆';
+}
+
+function announceLayerEdit(message: string): void {
+  layerEditStatus.dataset.state = '';
+  layerEditStatus.textContent = message;
+  layerEditLiveRegion.textContent = '';
+  window.setTimeout(() => {
+    layerEditLiveRegion.textContent = message;
+  }, 20);
+}
+
+function waitForAnimationFrame(): Promise<void> {
+  return new Promise((resolve) => window.requestAnimationFrame(() => resolve()));
+}
+
+function syncLayerProcessingBounds(): void {
+  const canvasRect = canvas.getBoundingClientRect();
+  const stageRect = stage.getBoundingClientRect();
+  layerProcessingOverlay.style.left = `${canvasRect.left - stageRect.left}px`;
+  layerProcessingOverlay.style.top = `${canvasRect.top - stageRect.top}px`;
+  layerProcessingOverlay.style.width = `${canvasRect.width}px`;
+  layerProcessingOverlay.style.height = `${canvasRect.height}px`;
+}
+
+async function beginLayerProcessing(title: string, detail: string): Promise<void> {
+  layerProcessingActive = true;
+  layerProcessingStartedAt = performance.now();
+  layerProcessingTitle.textContent = title;
+  layerProcessingDetail.textContent = detail;
+  syncLayerProcessingBounds();
+  document.body.dataset.layerProcessing = 'true';
+  layerProcessingOverlay.setAttribute('aria-hidden', 'false');
+  canvas.setAttribute('aria-busy', 'true');
+  stage.setAttribute('aria-busy', 'true');
+  await waitForAnimationFrame();
+  await waitForAnimationFrame();
+}
+
+async function updateLayerProcessing(title: string, detail: string): Promise<void> {
+  if (!layerProcessingActive) return;
+  layerProcessingTitle.textContent = title;
+  layerProcessingDetail.textContent = detail;
+  await waitForAnimationFrame();
+}
+
+async function finishLayerProcessing(): Promise<void> {
+  if (!layerProcessingActive) return;
+  const wasLongEnoughToShow = performance.now() - layerProcessingStartedAt >= 180;
+  if (wasLongEnoughToShow) {
+    await waitForAnimationFrame();
+    await delay(140);
+  }
+  layerProcessingActive = false;
+  document.body.dataset.layerProcessing = 'false';
+  layerProcessingOverlay.setAttribute('aria-hidden', 'true');
+  canvas.setAttribute('aria-busy', 'false');
+  stage.setAttribute('aria-busy', 'false');
+}
+
+function clearLayerFocus(): void {
+  if (layerFocusTimer !== null) {
+    window.clearTimeout(layerFocusTimer);
+    layerFocusTimer = null;
+  }
+  avatar?.setLayerFocus(null);
+}
+
+function flashLayerFocus(name: string): void {
+  clearLayerFocus();
+  const focusedAvatar = avatar;
+  if (!focusedAvatar) return;
+  focusedAvatar.setLayerFocus(name);
+  layerFocusTimer = window.setTimeout(() => {
+    focusedAvatar.setLayerFocus(null);
+    layerFocusTimer = null;
+  }, 800);
+}
+
+function hideCanvasPickMenu(hideMarker = false): void {
+  canvasPickMenu.hidden = true;
+  canvasPickOptions.replaceChildren();
+  if (hideMarker) canvasSelectionMarker.hidden = true;
+}
+
+function positionCanvasFeedback(clientX: number, clientY: number): void {
+  const stageRect = stage.getBoundingClientRect();
+  const canvasRect = canvas.getBoundingClientRect();
+  const markerX = clampValue(clientX - stageRect.left, canvasRect.left - stageRect.left, canvasRect.right - stageRect.left);
+  const markerY = clampValue(clientY - stageRect.top, canvasRect.top - stageRect.top, canvasRect.bottom - stageRect.top);
+  canvasSelectionMarker.style.left = `${markerX}px`;
+  canvasSelectionMarker.style.top = `${markerY}px`;
+  canvasSelectionMarker.hidden = false;
+
+  canvasPickMenu.style.left = '0px';
+  canvasPickMenu.style.top = '0px';
+  const menuWidth = canvasPickMenu.offsetWidth;
+  const menuHeight = canvasPickMenu.offsetHeight;
+  const left = clampValue(markerX + 18, 12, Math.max(12, stageRect.width - menuWidth - 12));
+  const preferredTop = markerY + 24;
+  const top = preferredTop + menuHeight <= stageRect.height - 12
+    ? preferredTop
+    : Math.max(12, markerY - menuHeight - 24);
+  canvasPickMenu.style.left = `${left}px`;
+  canvasPickMenu.style.top = `${top}px`;
+}
+
+function setSelectedLayer(
+  id: string,
+  point?: { clientX: number; clientY: number },
+): void {
+  selectedLayerId = id;
+  const selected = selectedEditableLayer();
+  if (!selected) return;
+  if (point) positionCanvasFeedback(point.clientX, point.clientY);
+  else canvasSelectionMarker.hidden = true;
+  renderLayerEditor();
+  selectedPartBadge.textContent = `選択中：${selected.label}`;
+  selectedPartBadge.hidden = workspaceMode !== 'layers';
+  avatar?.setMotionEnabled(false);
+  avatar?.setMouthOpen(selected.name.toLowerCase() === 'mouth_open' ? 1 : 0);
+  avatar?.setEyeOpen(selected.name.toLowerCase() === 'eye_close' ? 0 : 1);
+  flashLayerFocus(selected.name.toLowerCase());
+  announceLayerEdit(`${selected.label}を選びました。水色の印と、明るく表示された部分を確認してください。`);
+  if (layerOrderDetails.open) {
+    window.requestAnimationFrame(() => {
+      layerOrderList
+        .querySelector<HTMLElement>(`[data-layer-id="${CSS.escape(selected.id)}"]`)
+        ?.scrollIntoView({ block: 'nearest' });
+    });
+  }
+}
+
+function editableHitCandidates(names: readonly string[]): EditablePsdLayer[] {
+  const matches: EditablePsdLayer[] = [];
+  for (const name of names) {
+    const match = editableLayerByName(name);
+    if (match && !matches.some((candidate) => candidate.id === match.id)) matches.push(match);
+  }
+  return matches;
+}
+
+function pickLayerFromCanvas(clientX: number, clientY: number): void {
+  if (!avatar || workspaceMode !== 'layers' || layerEditBusy) return;
+  if (showingOriginal) {
+    announceLayerEdit('変更前を表示中です。「修正後に戻す」を押すと、部分を選べます。');
+    return;
+  }
+  const point = canvasPoint(clientX, clientY);
+  const candidates = editableHitCandidates(avatar.pickLayersAt(point.x, point.y));
+  canvasPickOptions.replaceChildren();
+  canvasPickMenu.hidden = false;
+  if (candidates.length === 0) {
+    canvasSelectionMarker.hidden = true;
+    canvasPickTitle.textContent = 'ここには選べる部分がありません';
+    canvasPickCopy.textContent = '人物の色がある場所をクリックするか、右側の「一覧から選ぶ」を使ってください。';
+    positionCanvasFeedback(clientX, clientY);
+    canvasSelectionMarker.hidden = true;
+    announceLayerEdit('ここには選べる部分がありません。人物の色がある場所か、一覧から選んでください。');
+    return;
+  }
+
+  const first = candidates[0]!;
+  setSelectedLayer(first.id, { clientX, clientY });
+  if (candidates.length === 1) {
+    canvasPickMenu.hidden = true;
+    return;
+  }
+
+  canvasPickTitle.textContent = `この場所には${candidates.length}個の部分があります`;
+  canvasPickCopy.textContent = '明るくしたい部分を選んでください。手前にある順です。';
+  for (const candidate of candidates) {
+    const button = document.createElement('button');
+    button.type = 'button';
+    button.textContent = candidate.label;
+    button.setAttribute('aria-pressed', String(candidate.id === first.id));
+    button.addEventListener('click', () => {
+      setSelectedLayer(candidate.id, { clientX, clientY });
+      hideCanvasPickMenu();
+    });
+    canvasPickOptions.append(button);
+  }
+  positionCanvasFeedback(clientX, clientY);
+}
+
+function renderCommonFixes(): void {
+  commonFixesList.replaceChildren();
+  const fixes = [
+    {
+      subject: 'handwear',
+      reference: 'topwear',
+      label: '腕・手',
+      front: '服の手前にする',
+      back: '服の奥にする',
+    },
+    {
+      subject: 'front hair',
+      reference: 'face',
+      label: '前髪',
+      front: '顔の手前にする',
+      back: '顔の奥にする',
+    },
+  ];
+  for (const fix of fixes) {
+    const subject = editableLayerByName(fix.subject);
+    const reference = editableLayerByName(fix.reference);
+    if (!subject || !reference) continue;
+    const subjectIndex = currentLayerOrder.indexOf(subject.id);
+    const referenceIndex = currentLayerOrder.indexOf(reference.id);
+    const row = document.createElement('div');
+    row.className = 'common-fix-row';
+    const label = document.createElement('div');
+    label.className = 'common-fix-label';
+    label.textContent = fix.label;
+    const actions = document.createElement('div');
+    actions.className = 'common-fix-actions';
+    for (const option of [
+      { text: fix.front, front: true },
+      { text: fix.back, front: false },
+    ]) {
+      const button = document.createElement('button');
+      button.type = 'button';
+      button.textContent = option.text;
+      button.setAttribute(
+        'aria-pressed',
+        String(option.front ? subjectIndex > referenceIndex : subjectIndex < referenceIndex),
+      );
+      button.disabled = layerEditBusy || showingOriginal;
+      button.addEventListener('click', () => {
+        hideCanvasPickMenu(true);
+        void moveLayerRelative(subject.id, reference.id, option.front);
+      });
+      actions.append(button);
+    }
+    row.append(label, actions);
+    commonFixesList.append(row);
+  }
+  commonFixes.hidden = commonFixesList.childElementCount === 0;
+}
+
+function clearLayerOrderDragUi(): void {
+  draggedLayerId = null;
+  layerDropIndicator.remove();
+  document.body.dataset.layerOrderDragging = 'false';
+  for (const row of layerOrderList.querySelectorAll<HTMLElement>('.layer-order-item')) {
+    row.setAttribute('aria-grabbed', 'false');
+  }
+}
+
+function showLayerOrderTouchNotice(): void {
+  layerOrderTouchNotice.hidden = false;
+  if (layerTouchNoticeTimer !== null) window.clearTimeout(layerTouchNoticeTimer);
+  layerTouchNoticeTimer = window.setTimeout(() => {
+    layerOrderTouchNotice.hidden = true;
+    layerTouchNoticeTimer = null;
+  }, 6000);
+}
+
+function updateLayerDropIndicator(clientY: number): void {
+  if (!draggedLayerId) return;
+  layerDropIndicator.remove();
+  const rows = [...layerOrderList.querySelectorAll<HTMLElement>('.layer-order-item')]
+    .filter((row) => row.dataset.layerId !== draggedLayerId);
+  const nextRow = rows.find((row) => {
+    const rect = row.getBoundingClientRect();
+    return clientY < rect.top + rect.height / 2;
+  });
+  if (nextRow) layerOrderList.insertBefore(layerDropIndicator, nextRow);
+  else layerOrderList.append(layerDropIndicator);
+}
+
+function droppedLayerDisplayOrder(): string[] | null {
+  if (!draggedLayerId || !layerDropIndicator.isConnected) return null;
+  const nextDisplayOrder: string[] = [];
+  for (const child of layerOrderList.children) {
+    if (child === layerDropIndicator) nextDisplayOrder.push(draggedLayerId);
+    else if (child instanceof HTMLElement && child.dataset.layerId !== draggedLayerId) {
+      const id = child.dataset.layerId;
+      if (id) nextDisplayOrder.push(id);
+    }
+  }
+  return nextDisplayOrder;
+}
+
+function renderLayerOrder(): void {
+  clearLayerOrderDragUi();
+  layerOrderList.replaceChildren();
+  const displayOrder = [...currentLayerOrder].reverse();
+  for (const id of displayOrder) {
+    const layer = editableLayers.find((candidate) => candidate.id === id);
+    if (!layer) continue;
+    const item = document.createElement('li');
+    item.className = 'layer-order-item';
+    item.tabIndex = 0;
+    item.draggable = false;
+    item.dataset.layerId = layer.id;
+    item.setAttribute('role', 'option');
+    item.setAttribute('aria-selected', String(layer.id === selectedLayerId));
+    item.setAttribute('aria-grabbed', 'false');
+    item.setAttribute('aria-label', `${layer.label}。選択して手前または奥へ移動できます。`);
+
+    const symbol = document.createElement('span');
+    symbol.className = 'layer-symbol';
+    symbol.textContent = layerSymbol(layer.name);
+    const copy = document.createElement('span');
+    copy.className = 'layer-item-copy';
+    const label = document.createElement('strong');
+    label.textContent = layer.label;
+    const position = document.createElement('span');
+    position.textContent = `手前から${displayOrder.indexOf(id) + 1}番目`;
+    copy.append(label, position);
+    const handle = document.createElement('span');
+    handle.className = 'layer-drag-handle';
+    handle.draggable = !layerEditBusy && !showingOriginal;
+    handle.title = 'ドラッグして並べ替える（PCのみ）';
+    handle.setAttribute('aria-label', `${layer.label}をドラッグして並べ替える（PCのみ）`);
+    handle.textContent = '⠿';
+    item.append(symbol, copy, handle);
+
+    const select = () => {
+      hideCanvasPickMenu(true);
+      setSelectedLayer(layer.id);
+    };
+    item.addEventListener('click', select);
+    item.addEventListener('keydown', (event) => {
+      if (event.key === 'Enter' || event.key === ' ') {
+        event.preventDefault();
+        select();
+      }
+    });
+    handle.addEventListener('pointerdown', (event) => {
+      if (event.pointerType !== 'touch') return;
+      event.stopPropagation();
+      showLayerOrderTouchNotice();
+    });
+    handle.addEventListener('dragstart', (event) => {
+      if (layerEditBusy || showingOriginal) {
+        event.preventDefault();
+        return;
+      }
+      if (!event.dataTransfer) return;
+      hideCanvasPickMenu(true);
+      selectedLayerId = layer.id;
+      for (const row of layerOrderList.querySelectorAll<HTMLElement>('.layer-order-item')) {
+        row.setAttribute('aria-selected', String(row === item));
+      }
+      selectedLayerCard.dataset.hasSelection = 'true';
+      selectedLayerName.textContent = layer.label;
+      selectedLayerHelp.textContent = '移動中です。水色の線が表示された場所で離してください。';
+      selectedPartBadge.textContent = `選択中：${layer.label}`;
+      selectedPartBadge.hidden = workspaceMode !== 'layers';
+      draggedLayerId = layer.id;
+      document.body.dataset.layerOrderDragging = 'true';
+      event.dataTransfer.effectAllowed = 'move';
+      event.dataTransfer.setData('text/plain', layer.id);
+      const preview = item.cloneNode(true) as HTMLElement;
+      preview.classList.add('layer-order-drag-preview');
+      preview.setAttribute('aria-grabbed', 'false');
+      preview.style.width = `${item.getBoundingClientRect().width}px`;
+      document.body.append(preview);
+      event.dataTransfer.setDragImage(preview, 32, 26);
+      window.setTimeout(() => preview.remove(), 0);
+      item.setAttribute('aria-grabbed', 'true');
+      announceLayerEdit(`${layer.label}を移動中です。水色の線が表示された場所で離してください。`);
+    });
+    handle.addEventListener('dragend', () => {
+      const wasDragging = draggedLayerId !== null;
+      clearLayerOrderDragUi();
+      if (wasDragging && !layerEditBusy) renderLayerEditor();
+    });
+    layerOrderList.append(item);
+  }
+}
+
+function renderLayerWarning(): void {
+  const hand = editableLayerByName('handwear');
+  const top = editableLayerByName('topwear');
+  if (
+    hand &&
+    top &&
+    currentLayerOrder.indexOf(hand.id) > currentLayerOrder.indexOf(top.id)
+  ) {
+    layerWarning.textContent =
+      '腕・手を服より手前にしています。手先は直っても、肩まわりまで手前に出ることがあります。プレビューで確認してください。';
+    layerWarning.hidden = false;
+    return;
+  }
+  layerWarning.hidden = true;
+}
+
+function renderLayerEditor(): void {
+  const selected = selectedEditableLayer();
+  const selectedIndex = selected ? currentLayerOrder.indexOf(selected.id) : -1;
+  const changed = hasUnsavedLayerChanges();
+  selectedLayerCard.dataset.hasSelection = String(Boolean(selected));
+  selectedLayerName.textContent = selected?.label ?? 'まだ選んでいません';
+  selectedLayerHelp.textContent = selected
+    ? '水色の印で選んだ部分です。下のボタンで重なりを調整できます。'
+    : '左の人物をクリックすると、ここに部分の名前が表示されます。';
+  moveLayerFront.disabled =
+    layerEditBusy || showingOriginal || selectedIndex < 0 || selectedIndex >= currentLayerOrder.length - 1;
+  moveLayerBack.disabled = layerEditBusy || showingOriginal || selectedIndex <= 0;
+  undoLayerEdit.disabled = layerEditBusy || showingOriginal || layerEditHistory.length === 0;
+  resetLayerEdit.disabled =
+    layerEditBusy ||
+    showingOriginal ||
+    layerOrderSignature(currentLayerOrder) === layerOrderSignature(originalLayerOrder);
+  beforeAfterToggle.disabled = layerEditBusy || !editedPreviewBuffer;
+  beforeAfterToggle.setAttribute('aria-pressed', String(showingOriginal));
+  beforeAfterToggle.textContent = !editedPreviewBuffer
+    ? '重なりを変更すると比較できます'
+    : showingOriginal
+      ? '修正後に戻す'
+      : '元の見た目を表示';
+  saveLayerEdit.disabled = layerEditBusy || showingOriginal || !changed;
+  saveLayerEdit.textContent = changed
+    ? '修正版を保存'
+    : '重なりを変更すると保存できます';
+  layerSaveFile.textContent = sourcePsdFileName
+    ? `保存名：${editedPsdFileName(sourcePsdFileName)}`
+    : '';
+  previewModeBadge.textContent = showingOriginal ? '変更前' : '修正後';
+  document.body.dataset.comparisonView = showingOriginal ? 'original' : 'edited';
+  layerEditTab.textContent = changed
+    ? '重なりを直す・未保存'
+    : '重なりを直す';
+  layerOrderCount.textContent = String(currentLayerOrder.length);
+  openLayerList.setAttribute('aria-expanded', String(layerOrderDetails.open));
+  previewModeBadge.hidden = workspaceMode !== 'layers';
+  selectedPartBadge.hidden = workspaceMode !== 'layers' || !selected;
+  if (selected) selectedPartBadge.textContent = `選択中：${selected.label}`;
+  renderCommonFixes();
+  renderLayerOrder();
+  renderLayerWarning();
+}
+
+function initializeLayerEditor(buffer: ArrayBuffer, fileName: string): void {
+  sourcePsdBuffer = buffer.slice(0);
+  sourcePsdFileName = fileName;
+  editedPreviewBuffer = null;
+  showingOriginal = false;
+  layerEditBusy = false;
+  layerEditHistory = [];
+  try {
+    const summary = inspectEditablePsd(sourcePsdBuffer);
+    editableLayers = summary.layers;
+    originalLayerOrder = summary.layers.map((layer) => layer.id);
+    currentLayerOrder = [...originalLayerOrder];
+    savedLayerOrderSignature = layerOrderSignature(originalLayerOrder);
+    selectedLayerId = null;
+    layerEditTab.disabled = false;
+    layerEditorUnavailable.hidden = summary.editable;
+    layerEditorContent.hidden = !summary.editable;
+    layerEditorUnavailable.textContent = summary.reason ?? '';
+  } catch (error) {
+    editableLayers = [];
+    originalLayerOrder = [];
+    currentLayerOrder = [];
+    savedLayerOrderSignature = '';
+    selectedLayerId = null;
+    layerEditTab.disabled = false;
+    layerEditorUnavailable.hidden = false;
+    layerEditorContent.hidden = true;
+    layerEditorUnavailable.textContent =
+      error instanceof Error ? error.message : '重なりの情報を読み込めませんでした。';
+  }
+  hideCanvasPickMenu(true);
+  renderLayerEditor();
+}
+
+async function refreshEditedPreview(message: string): Promise<void> {
+  if (!sourcePsdBuffer) return;
+  layerEditBusy = true;
+  renderLayerEditor();
+  announceLayerEdit('修正後の見た目を準備しています…');
+  await beginLayerProcessing(
+    '重なりを変更しています',
+    'PSDを組み直しています。数秒かかることがあります。',
+  );
+  try {
+    clearLayerFocus();
+    const result = buildReorderedPsd(sourcePsdBuffer, currentLayerOrder);
+    editedPreviewBuffer = result.buffer;
+    showingOriginal = false;
+    await updateLayerProcessing(
+      '表示を更新しています',
+      '修正後のPSDを読み込み、プレビューを整えています。',
+    );
+    await activatePsd(editedPreviewBuffer, sourcePsdFileName, {
+      editorRefresh: true,
+      preserveView: true,
+    });
+    statusNode.textContent = '未保存';
+    phaseNode.textContent = '未保存の変更があります';
+    detailNode.textContent = message;
+    announceLayerEdit(message);
+  } finally {
+    await finishLayerProcessing();
+    layerEditBusy = false;
+    renderLayerEditor();
+  }
+}
+
+async function commitLayerOrder(nextOrder: string[], message: string): Promise<void> {
+  if (layerEditBusy || showingOriginal) return;
+  if (layerOrderSignature(nextOrder) === layerOrderSignature(currentLayerOrder)) return;
+  const previousOrder = [...currentLayerOrder];
+  layerEditHistory.push(previousOrder);
+  currentLayerOrder = nextOrder;
+  try {
+    await refreshEditedPreview(message);
+  } catch (error) {
+    currentLayerOrder = previousOrder;
+    layerEditHistory.pop();
+    announceLayerEdit(error instanceof Error ? error.message : String(error));
+    showLoadError(error);
+    renderLayerEditor();
+  }
+}
+
+async function moveSelectedLayer(direction: 'front' | 'back'): Promise<void> {
+  const selected = selectedEditableLayer();
+  if (!selected) return;
+  const index = currentLayerOrder.indexOf(selected.id);
+  const target = direction === 'front' ? index + 1 : index - 1;
+  if (target < 0 || target >= currentLayerOrder.length) return;
+  const reference = editableLayers.find(
+    (layer) => layer.id === currentLayerOrder[target],
+  );
+  const next = [...currentLayerOrder];
+  [next[index], next[target]] = [next[target]!, next[index]!];
+  await commitLayerOrder(
+    next,
+    `${selected.label}を、${reference?.label ?? '隣の部分'}より${direction === 'front' ? '手前へ' : '奥へ'}移動しました。`,
+  );
+}
+
+async function moveLayerRelative(
+  subjectId: string,
+  referenceId: string,
+  front: boolean,
+): Promise<void> {
+  const subject = editableLayers.find((layer) => layer.id === subjectId);
+  const reference = editableLayers.find((layer) => layer.id === referenceId);
+  if (!subject || !reference) return;
+  const next = currentLayerOrder.filter((id) => id !== subjectId);
+  const referenceIndex = next.indexOf(referenceId);
+  next.splice(referenceIndex + (front ? 1 : 0), 0, subjectId);
+  selectedLayerId = subjectId;
+  await commitLayerOrder(
+    next,
+    `${subject.label}を、${reference.label}より${front ? '手前へ' : '奥へ'}移動しました。`,
+  );
+}
+
+async function undoLastLayerEdit(): Promise<void> {
+  const previous = layerEditHistory.pop();
+  if (!previous) return;
+  currentLayerOrder = previous;
+  try {
+    await refreshEditedPreview('1つ前の重なりに戻しました。');
+  } catch (error) {
+    announceLayerEdit(error instanceof Error ? error.message : String(error));
+  }
+}
+
+async function resetLayerEdits(): Promise<void> {
+  if (layerOrderSignature(currentLayerOrder) === layerOrderSignature(originalLayerOrder)) return;
+  layerEditHistory.push([...currentLayerOrder]);
+  currentLayerOrder = [...originalLayerOrder];
+  await refreshEditedPreview('今回の変更をすべて取り消しました。');
+}
+
+async function toggleOriginalPreview(): Promise<void> {
+  if (!sourcePsdBuffer || !editedPreviewBuffer || layerEditBusy) return;
+  showingOriginal = !showingOriginal;
+  layerEditBusy = true;
+  renderLayerEditor();
+  await beginLayerProcessing(
+    showingOriginal ? '変更前を表示しています' : '修正後を表示しています',
+    'PSDを読み込み、プレビューを切り替えています。',
+  );
+  try {
+    await activatePsd(
+      showingOriginal ? sourcePsdBuffer : editedPreviewBuffer,
+      sourcePsdFileName,
+      { editorRefresh: true, preserveView: true },
+    );
+    announceLayerEdit(
+      showingOriginal
+        ? '変更前の見た目を表示しています。修正を続けるには「修正後に戻す」を押してください。'
+        : '修正後の見た目に戻りました。',
+    );
+  } finally {
+    await finishLayerProcessing();
+    layerEditBusy = false;
+    renderLayerEditor();
+  }
+}
+
+async function saveEditedPsd(): Promise<void> {
+  if (!sourcePsdBuffer || !hasUnsavedLayerChanges() || layerEditBusy) return;
+  layerEditBusy = true;
+  renderLayerEditor();
+  announceLayerEdit('修正版を作成し、保存後も開けることを確認しています…');
+  await beginLayerProcessing(
+    '修正版を準備しています',
+    'PSDを組み直し、保存後も開けることを確認しています。',
+  );
+  try {
+    const result = buildReorderedPsd(sourcePsdBuffer, currentLayerOrder);
+    const fileName = editedPsdFileName(sourcePsdFileName);
+    await updateLayerProcessing(
+      '保存を開始しています',
+      '確認済みの修正版をダウンロードします。',
+    );
+    const url = URL.createObjectURL(
+      new Blob([result.buffer], { type: 'image/vnd.adobe.photoshop' }),
+    );
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = fileName;
+    link.click();
+    window.setTimeout(() => URL.revokeObjectURL(url), 30_000);
+    savedLayerOrderSignature = layerOrderSignature(currentLayerOrder);
+    announceLayerEdit(
+      `修正版を保存しました。元のPSDはそのまま残っています。通常はダウンロードフォルダに「${fileName}」があります。`,
+    );
+    layerEditStatus.dataset.state = 'success';
+    statusNode.textContent = '保存済み';
+    phaseNode.textContent = '修正版を保存しました';
+    detailNode.textContent = '元のPSDは変更されていません。';
+  } catch (error) {
+    announceLayerEdit(
+      `保存できませんでした。元のPSDは変更されていません。${error instanceof Error ? ` ${error.message}` : ''}`,
+    );
+  } finally {
+    await finishLayerProcessing();
+    layerEditBusy = false;
+    renderLayerEditor();
+  }
+}
+
+function confirmDiscardLayerChanges(): boolean {
+  if (!hasUnsavedLayerChanges()) return true;
+  return window.confirm(
+    'まだ保存していない変更があります。\n\n「キャンセル」で編集に戻ります。「OK」で変更を破棄して別のPSDを開きます。',
+  );
+}
+
+function setWorkspaceMode(mode: WorkspaceMode): void {
+  if (mode === 'layers' && layerEditTab.disabled) return;
+  workspaceMode = mode;
+  document.body.dataset.workspaceMode = mode;
+  motionTab.setAttribute('aria-selected', String(mode === 'motion'));
+  layerEditTab.setAttribute('aria-selected', String(mode === 'layers'));
+  motionPanel.hidden = mode !== 'motion';
+  layerEditPanel.hidden = mode !== 'layers';
+  previewModeBadge.hidden = mode !== 'layers';
+  selectedPartBadge.hidden = mode !== 'layers' || !selectedEditableLayer();
+  demoToken += 1;
+  if (mode === 'layers') {
+    avatar?.setMotionEnabled(false);
+    avatar?.setEyeOpen(1);
+    avatar?.setMouthOpen(0);
+    clearLayerFocus();
+    statusNode.textContent = hasUnsavedLayerChanges() ? '未保存' : '変更なし';
+    phaseNode.textContent = hasUnsavedLayerChanges()
+      ? '未保存の変更があります'
+      : '重なりを修正できます';
+    detailNode.textContent = '人物の直したい部分をクリックし、「手前へ」「奥へ」で調整してください。';
+  } else {
+    hideCanvasPickMenu(true);
+    clearLayerFocus();
+    applyAvatarMotionMode(currentMode);
+    statusNode.textContent = '準備完了';
+    phaseNode.textContent = 'PSD読み込み完了';
+    detailNode.textContent = '「動きを自動チェック」または個別の操作を試せます。';
+  }
+  renderLayerEditor();
+}
+
 function syncMotionTuningControls(): void {
   for (const id of tuningInputIds) {
     const key = tuningKeys[id];
@@ -567,6 +1369,28 @@ const api: RigQaApi = {
   getProfileParameters() { return { ...profileParameters }; },
   resetProfileParameters() { resetAdvancedProfileParameters(); },
   getAverageFps() { return avatar?.getAverageFps() ?? 0; },
+  setWorkspaceMode(mode) { setWorkspaceMode(mode); },
+  async setLayerProcessingPreview(active) {
+    if (active) {
+      await beginLayerProcessing(
+        '重なりを変更しています',
+        'PSDを組み直しています。数秒かかることがあります。',
+      );
+    } else {
+      await finishLayerProcessing();
+    }
+  },
+  getLayerEditorState() {
+    return {
+      mode: workspaceMode,
+      originalOrder: [...originalLayerOrder],
+      currentOrder: [...currentLayerOrder],
+      selectedLayer: selectedEditableLayer()?.name ?? null,
+      layerFocus: avatar?.getLayerFocus() ?? null,
+      dirty: hasUnsavedLayerChanges(),
+      showingOriginal,
+    };
+  },
 };
 window.rigQa = api;
 
@@ -597,9 +1421,11 @@ function showLoadError(error: unknown): void {
 async function activatePsd(
   buffer: ArrayBuffer,
   fileName: string,
+  options: { editorRefresh?: boolean; preserveView?: boolean } = {},
 ): Promise<void> {
   const token = ++loadToken;
-  setLoadingState(fileName);
+  const previousView = { offsetX: viewOffsetX, offsetY: viewOffsetY, scale: viewScale };
+  if (!options.editorRefresh) setLoadingState(fileName);
   const detection = await detectAnime25RigFromBuffer(buffer);
   if (token !== loadToken) return;
   if (!detection.usable || !detection.rig || !detection.summary) {
@@ -612,12 +1438,13 @@ async function activatePsd(
     return;
   }
   const previousAvatar = avatar;
+  clearLayerFocus();
   avatar = nextAvatar;
   previousAvatar?.dispose();
 
-  viewOffsetX = 0;
-  viewOffsetY = 0;
-  viewScale = DEFAULT_VIEW_SCALE;
+  viewOffsetX = options.preserveView ? previousView.offsetX : 0;
+  viewOffsetY = options.preserveView ? previousView.offsetY : 0;
+  viewScale = options.preserveView ? previousView.scale : DEFAULT_VIEW_SCALE;
   dragState = null;
   document.body.dataset.avatarDragging = 'false';
   syncViewTransform();
@@ -630,12 +1457,20 @@ async function activatePsd(
   document.body.dataset.avatarReady = 'true';
   setAvatarControlsDisabled(false);
   currentMode = 'static';
-  selectMode('static');
-  api.setState(eyeOpen, mouthOpen);
+  if (workspaceMode === 'layers') {
+    avatar.setMotionEnabled(false);
+    avatar.setEyeOpen(1);
+    avatar.setMouthOpen(0);
+  } else {
+    selectMode('static');
+    api.setState(eyeOpen, mouthOpen);
+  }
   syncControls();
-  statusNode.textContent = '準備完了';
+  if (!options.editorRefresh) statusNode.textContent = '準備完了';
   reportNode.textContent = JSON.stringify({ summary: detection.summary, anchors: detection.rig.anchors }, null, 2);
-  api.setLabel('PSD読み込み完了', '「動きを自動チェック」または個別の操作を試せます。', 1);
+  if (!options.editorRefresh) {
+    api.setLabel('PSD読み込み完了', '「動きを自動チェック」または個別の操作を試せます。', 1);
+  }
   document.body.dataset.fileLoadState = 'ready';
 }
 
@@ -647,13 +1482,18 @@ async function loadLocalPsd(file: File): Promise<void> {
   if (!isPsdFile(file)) {
     throw new Error('PSDファイル（.psd）を選択してください。');
   }
+  if (!confirmDiscardLayerChanges()) return;
   generatedPsdSelect.value = '';
-  await activatePsd(await file.arrayBuffer(), file.name);
+  activeGeneratedPsdId = '';
+  const buffer = await file.arrayBuffer();
+  initializeLayerEditor(buffer, file.name);
+  setWorkspaceMode('motion');
+  await activatePsd(buffer, file.name);
 }
 
 function generatedPsdLabel(item: GeneratedPsd): string {
   const readiness = item.productionReady === true
-    ? 'レイヤー構造確認済み'
+    ? '基本チェック済み'
     : item.productionReady === false
       ? '要確認'
       : '';
@@ -667,8 +1507,11 @@ async function loadGeneratedPsd(item: GeneratedPsd): Promise<void> {
   if (!response.ok) throw new Error(`生成済みPSDを読み込めませんでした（${response.status}）。`);
   const buffer = await response.arrayBuffer();
   if (token !== loadToken) return;
+  initializeLayerEditor(buffer, item.name);
+  setWorkspaceMode('motion');
   await activatePsd(buffer, item.name);
   generatedPsdSelect.value = item.id;
+  activeGeneratedPsdId = item.id;
 }
 
 async function refreshGeneratedPsdList(autoLoad = false): Promise<void> {
@@ -743,6 +1586,78 @@ function installEventListeners(): void {
     preserveDrawingBuffer: true,
   });
 
+  motionTab.addEventListener('click', () => setWorkspaceMode('motion'));
+  layerEditTab.addEventListener('click', () => setWorkspaceMode('layers'));
+  moveLayerFront.addEventListener('click', () => {
+    hideCanvasPickMenu();
+    void moveSelectedLayer('front');
+  });
+  moveLayerBack.addEventListener('click', () => {
+    hideCanvasPickMenu();
+    void moveSelectedLayer('back');
+  });
+  openLayerList.addEventListener('click', () => {
+    hideCanvasPickMenu(true);
+    layerOrderDetails.open = true;
+    openLayerList.setAttribute('aria-expanded', 'true');
+    const panelRect = controlPanel.getBoundingClientRect();
+    const detailsRect = layerOrderDetails.getBoundingClientRect();
+    controlPanel.scrollTo({
+      top: controlPanel.scrollTop + detailsRect.top - panelRect.top,
+      behavior: 'smooth',
+    });
+  });
+  layerOrderDetails.addEventListener('toggle', () => {
+    openLayerList.setAttribute('aria-expanded', String(layerOrderDetails.open));
+  });
+  layerOrderList.addEventListener('dragover', (event) => {
+    if (!draggedLayerId || layerEditBusy || showingOriginal) return;
+    event.preventDefault();
+    if (event.dataTransfer) event.dataTransfer.dropEffect = 'move';
+    updateLayerDropIndicator(event.clientY);
+  });
+  layerOrderList.addEventListener('drop', (event) => {
+    if (!draggedLayerId || layerEditBusy || showingOriginal) return;
+    event.preventDefault();
+    const draggedId = draggedLayerId;
+    const nextDisplayOrder = droppedLayerDisplayOrder();
+    clearLayerOrderDragUi();
+    if (!nextDisplayOrder) return;
+    const nextOrder = nextDisplayOrder.reverse();
+    if (layerOrderSignature(nextOrder) === layerOrderSignature(currentLayerOrder)) {
+      announceLayerEdit('位置は変わっていません。右端の点々を別の場所まで動かしてください。');
+      renderLayerEditor();
+      return;
+    }
+    void commitLayerOrder(
+      nextOrder,
+      `${editableLayers.find((candidate) => candidate.id === draggedId)?.label ?? '選んだ部分'}の重なりを変更しました。`,
+    );
+  });
+  beforeAfterToggle.addEventListener('click', () => {
+    void toggleOriginalPreview();
+  });
+  undoLayerEdit.addEventListener('click', () => {
+    void undoLastLayerEdit();
+  });
+  resetLayerEdit.addEventListener('click', () => {
+    void resetLayerEdits();
+  });
+  saveLayerEdit.addEventListener('click', () => {
+    void saveEditedPsd();
+  });
+  window.addEventListener('beforeunload', (event) => {
+    if (!hasUnsavedLayerChanges()) return;
+    event.preventDefault();
+    event.returnValue = '';
+  });
+  window.addEventListener('keydown', (event) => {
+    if (event.key === 'Escape' && !canvasPickMenu.hidden) hideCanvasPickMenu();
+  });
+  window.addEventListener('resize', () => {
+    if (layerProcessingActive) syncLayerProcessingBounds();
+  });
+
   psdFileInput.addEventListener('change', () => {
     const file = psdFileInput.files?.[0];
     psdFileInput.value = '';
@@ -753,6 +1668,10 @@ function installEventListeners(): void {
   generatedPsdSelect.addEventListener('change', () => {
     const item = generatedPsds.find((candidate) => candidate.id === generatedPsdSelect.value);
     if (!item) return;
+    if (!confirmDiscardLayerChanges()) {
+      generatedPsdSelect.value = activeGeneratedPsdId;
+      return;
+    }
     void loadGeneratedPsd(item).catch(showLoadError);
   });
   generatedPsdRefresh.addEventListener('click', () => {
@@ -829,13 +1748,32 @@ function installEventListeners(): void {
   });
   canvas.addEventListener('pointerdown', (event) => {
     if (event.button !== 0 || !avatar) return;
-    dragState = { pointerId: event.pointerId, clientX: event.clientX, clientY: event.clientY, time: performance.now() };
-    avatar?.setDragMotion(0, 0, true);
+    dragState = {
+      pointerId: event.pointerId,
+      pointerType: event.pointerType,
+      startClientX: event.clientX,
+      startClientY: event.clientY,
+      clientX: event.clientX,
+      clientY: event.clientY,
+      time: performance.now(),
+      moved: false,
+    };
     canvas.setPointerCapture(event.pointerId);
-    document.body.dataset.avatarDragging = 'true';
   });
   canvas.addEventListener('pointermove', (event) => {
     if (!dragState || dragState.pointerId !== event.pointerId) return;
+    const threshold = dragState.pointerType === 'touch' ? 10 : 5;
+    if (!dragState.moved) {
+      const distance = Math.hypot(
+        event.clientX - dragState.startClientX,
+        event.clientY - dragState.startClientY,
+      );
+      if (distance <= threshold) return;
+      dragState.moved = true;
+      avatar?.setDragMotion(0, 0, true);
+      document.body.dataset.avatarDragging = 'true';
+      hideCanvasPickMenu(true);
+    }
     const rect = canvas.getBoundingClientRect();
     const deltaX = ((event.clientX - dragState.clientX) / rect.width) * canvas.width;
     const deltaY = ((event.clientY - dragState.clientY) / rect.height) * canvas.height;
@@ -849,15 +1787,19 @@ function installEventListeners(): void {
     dragState.time = now;
     syncViewTransform();
   });
-  const endDrag = (event: PointerEvent) => {
+  const endDrag = (event: PointerEvent, allowSelection: boolean) => {
     if (!dragState || dragState.pointerId !== event.pointerId) return;
+    const completedGesture = dragState;
     dragState = null;
     avatar?.setDragMotion(0, 0, false);
     document.body.dataset.avatarDragging = 'false';
+    if (allowSelection && !completedGesture.moved) {
+      pickLayerFromCanvas(event.clientX, event.clientY);
+    }
   };
-  canvas.addEventListener('pointerup', endDrag);
-  canvas.addEventListener('pointercancel', endDrag);
-  canvas.addEventListener('lostpointercapture', endDrag);
+  canvas.addEventListener('pointerup', (event) => endDrag(event, true));
+  canvas.addEventListener('pointercancel', (event) => endDrag(event, false));
+  canvas.addEventListener('lostpointercapture', (event) => endDrag(event, false));
   canvas.addEventListener('wheel', (event) => {
     event.preventDefault();
     setViewScale(viewScale * Math.exp(-event.deltaY * 0.001), canvasPoint(event.clientX, event.clientY));
@@ -904,6 +1846,10 @@ function installEventListeners(): void {
   syncBlinkControls();
   syncMotionTuningControls();
   setAvatarControlsDisabled(true);
+  document.body.dataset.workspaceMode = 'motion';
+  layerEditorUnavailable.textContent = 'PSDを読み込むと、重なりを修正できます。';
+  layerEditorUnavailable.hidden = false;
+  layerEditorContent.hidden = true;
 }
 
 async function run(): Promise<void> {
@@ -916,7 +1862,9 @@ async function run(): Promise<void> {
   try {
     const response = await fetch(psdUrl);
     if (!response.ok) throw new Error(`PSD fetch failed: ${response.status}`);
-    await activatePsd(await response.arrayBuffer(), selectedModel);
+    const buffer = await response.arrayBuffer();
+    initializeLayerEditor(buffer, selectedModel);
+    await activatePsd(buffer, selectedModel);
   } catch (error) {
     showLoadError(error);
   }

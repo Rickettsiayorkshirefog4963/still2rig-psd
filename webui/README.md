@@ -25,11 +25,11 @@ npm run preview:qa
 
 Node.js 20.19 or newer is required by the WebUI toolchain.
 
-The preview is desktop-first and listens on `127.0.0.1` by default. Its narrow
-layout remains readable and keeps PSD selection before the canvas, but phone
-access, touch interaction, and large-PSD memory use are not officially
-supported. Do not expose the generated-PSD API to a LAN without reviewing the
-privacy implications.
+The preview is designed for desktop browsers and listens on `127.0.0.1` by
+default. Its narrow layout remains readable and keeps PSD selection before the
+canvas, but phone access, touch-based layer sorting, and large-PSD memory use
+are not supported. Do not expose the generated-PSD API to a LAN without
+reviewing the privacy implications.
 
 ## PSD sources
 
@@ -56,6 +56,14 @@ browsing. Symlinks in output directories are not served.
   slider, exact numeric input, displayed default, and one-click reset
 - Canvas drag, wheel zoom, zoom slider, and view reset
 - PSD drag-and-drop and file-picker input
+- Separate **Check motion** and **Fix overlaps** work modes
+- Plain-language front/back fixes for arms, clothing, face, and front hair
+- Alpha-aware canvas click selection with overlap candidates and visible selection feedback
+- One-step front/back movement, desktop drag sorting with a visible insertion target,
+  undo, reset, and original/edited comparison
+- Preview-local progress feedback for slower PSD rebuild, comparison, and export work
+- Safe export to a new `*-重なり修正版.psd` file; the source PSD is never overwritten
+- Export round-trip validation before the browser download starts
 
 Motion settings remain active when another PSD is loaded in the same page.
 Reloading the page restores the standard preset.
@@ -105,8 +113,16 @@ npm run preview
 開くと、顔や体の向き、目・眉、口、髪・物理の計32項目を、スライダーと数値入力で
 調整できます。各項目には最初の値を表示し、「最初の値に戻す」でまとめて元に戻せます。
 
+「重なりを直す」では、人物上の直したい部分をクリックして選べます。
+複数の部分が重なる場所では候補を表示します。PSDの専門用語を使わず「腕・手を服の手前／奥へ」
+「前髪を顔の手前／奥へ」のように前後関係を変更できます。変更前との比較、1つ戻す、
+今回の変更の取り消し、PCのマウスによる細かいドラッグ並べ替えにも対応します。保存時は元のPSDを上書きせず、
+`-重なり修正版.psd`という別ファイルを作成し、再読込で並びを確認してからダウンロードします。
+PSDの組み直し、変更前との切り替え、保存準備に時間がかかる場合は、プレビュー上に現在の
+処理内容を表示します。短時間で終わる操作では表示を遅らせ、画面がちらつかないようにしています。
+
 このプレビューはデスクトップブラウザ向けで、既定では`127.0.0.1`だけで待ち受けます。
-狭い画面でも読み込み導線は表示されますが、スマートフォンからの接続、タッチ操作、
-大容量PSDのメモリ使用量は正式対応・実機検証の対象外です。
+狭い画面でも読み込み導線は表示されますが、スマートフォンからの接続、タッチ操作での
+レイヤー並べ替え、大容量PSDのメモリ使用量は対応対象外です。
 
 PSD、合成QA素材、スクリーンショットはすべてGit管理外に保存されます。

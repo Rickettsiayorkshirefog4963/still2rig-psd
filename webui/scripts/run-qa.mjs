@@ -3,6 +3,7 @@ import path from 'node:path';
 import { spawn } from 'node:child_process';
 import { createRequire } from 'node:module';
 
+import { readPsd } from 'ag-psd';
 import { chromium } from 'playwright';
 
 const webuiRoot = path.resolve(import.meta.dirname, '..');
@@ -78,6 +79,27 @@ async function waitForServer() {
   throw new Error(`Vite did not start.\n${serverLog}`);
 }
 
+async function canvasClientPoint(page, modelX, modelY) {
+  return page.evaluate(({ modelX, modelY }) => {
+    const canvas = document.querySelector('#rig-canvas');
+    const rect = canvas.getBoundingClientRect();
+    const view = window.rigQa.getViewTransform();
+    const canvasX =
+      (modelX - canvas.width / 2) * view.scale + canvas.width / 2 + view.offsetX;
+    const canvasY =
+      (modelY - canvas.height / 2) * view.scale + canvas.height / 2 + view.offsetY;
+    return {
+      x: rect.left + (canvasX / canvas.width) * rect.width,
+      y: rect.top + (canvasY / canvas.height) * rect.height,
+    };
+  }, { modelX, modelY });
+}
+
+async function clickCanvasModelPoint(page, modelX, modelY) {
+  const point = await canvasClientPoint(page, modelX, modelY);
+  await page.mouse.click(point.x, point.y);
+}
+
 let browser;
 try {
   await waitForServer();
@@ -141,6 +163,375 @@ try {
     };
   });
   await page.screenshot({ path: path.join(qaRoot, 'generated-loaded.png') });
+
+  await page.click('#layer-edit-tab');
+  await page.waitForTimeout(220);
+  const layerEditorInitial = await page.evaluate(() => ({
+    state: window.rigQa.getLayerEditorState(),
+    modeLabel: document.querySelector('#layer-edit-tab')?.getAttribute('aria-selected'),
+    motionHidden: document.querySelector('#motion-panel')?.hidden,
+    editorHidden: document.querySelector('#layer-edit-panel')?.hidden,
+    visibleRows: document.querySelectorAll('.layer-order-item').length,
+    topLabel: document.querySelector('.layer-depth-label')?.textContent,
+    selectedName: document.querySelector('#selected-layer-name')?.textContent,
+    saveDisabled: document.querySelector('#save-layer-edit')?.disabled,
+    frontDisabled: document.querySelector('#move-layer-front')?.disabled,
+    pickHint: document.querySelector('.layer-canvas-hint')?.textContent,
+    selectionCopy: [
+      document.querySelector('.layer-canvas-hint')?.textContent,
+      document.querySelector('.layer-selection-step')?.textContent,
+      document.querySelector('#selected-layer-help')?.textContent,
+    ].join(' '),
+    selectedCardTop: document.querySelector('#selected-layer-card')?.getBoundingClientRect().top,
+    selectedCardBottom: document.querySelector('#selected-layer-card')?.getBoundingClientRect().bottom,
+    viewportHeight: window.innerHeight,
+  }));
+  await page.screenshot({ path: path.join(qaRoot, 'layer-editor-initial.png') });
+
+  await page.evaluate(() => window.rigQa.setLayerProcessingPreview(true));
+  await page.waitForFunction(
+    () => Number(getComputedStyle(document.querySelector('#layer-processing-overlay')).opacity) > 0.95,
+    null,
+    { timeout: 2_000 },
+  );
+  const layerProcessingDesktop = await page.evaluate(() => {
+    const canvas = document.querySelector('#rig-canvas')?.getBoundingClientRect();
+    const overlay = document.querySelector('#layer-processing-overlay')?.getBoundingClientRect();
+    const overlayStyle = getComputedStyle(document.querySelector('#layer-processing-overlay'));
+    return {
+      active: document.body.dataset.layerProcessing,
+      ariaHidden: document.querySelector('#layer-processing-overlay')?.getAttribute('aria-hidden'),
+      canvasBusy: document.querySelector('#rig-canvas')?.getAttribute('aria-busy'),
+      stageBusy: document.querySelector('.stage')?.getAttribute('aria-busy'),
+      title: document.querySelector('#layer-processing-title')?.textContent,
+      detail: document.querySelector('#layer-processing-detail')?.textContent,
+      opacity: Number(overlayStyle.opacity),
+      pointerEvents: overlayStyle.pointerEvents,
+      spinnerAnimation: getComputedStyle(document.querySelector('.layer-processing-spinner')).animationName,
+      boundsDifference: canvas && overlay ? {
+        left: Math.abs(canvas.left - overlay.left),
+        top: Math.abs(canvas.top - overlay.top),
+        width: Math.abs(canvas.width - overlay.width),
+        height: Math.abs(canvas.height - overlay.height),
+      } : null,
+    };
+  });
+  await page.screenshot({ path: path.join(qaRoot, 'layer-processing-desktop.png') });
+  await page.evaluate(() => window.rigQa.setLayerProcessingPreview(false));
+  const layerProcessingDismissed = await page.evaluate(() => ({
+    active: document.body.dataset.layerProcessing,
+    ariaHidden: document.querySelector('#layer-processing-overlay')?.getAttribute('aria-hidden'),
+    canvasBusy: document.querySelector('#rig-canvas')?.getAttribute('aria-busy'),
+    opacity: Number(getComputedStyle(document.querySelector('#layer-processing-overlay')).opacity),
+  }));
+
+  await page.click('#open-layer-list');
+  await page.waitForFunction(() => document.querySelector('#layer-order-details')?.open === true);
+  await page.waitForTimeout(500);
+  const layerOrderOpenedWithoutOverlap = await page.evaluate(() => {
+    const panel = document.querySelector('.control-panel');
+    const header = document.querySelector('.app-header');
+    const selectedCard = document.querySelector('#selected-layer-card');
+    const details = document.querySelector('#layer-order-details');
+    const summary = document.querySelector('#layer-order-details > summary');
+    if (!panel || !header || !selectedCard || !details || !summary) return null;
+    const panelRect = panel.getBoundingClientRect();
+    const headerRect = header.getBoundingClientRect();
+    const selectedRect = selectedCard.getBoundingClientRect();
+    const detailsRect = details.getBoundingClientRect();
+    const summaryRect = summary.getBoundingClientRect();
+    const pointTarget = document.elementFromPoint(
+      summaryRect.left + Math.min(20, summaryRect.width / 2),
+      summaryRect.top + Math.min(12, summaryRect.height / 2),
+    );
+    return {
+      panelScrollTop: panel.scrollTop,
+      windowScrollY: window.scrollY,
+      headerTop: headerRect.top,
+      headerBottom: headerRect.bottom,
+      selectedPosition: getComputedStyle(selectedCard).position,
+      selectedBottom: selectedRect.bottom,
+      panelTop: panelRect.top,
+      panelBottom: panelRect.bottom,
+      detailsTop: detailsRect.top,
+      summaryTop: summaryRect.top,
+      summaryBottom: summaryRect.bottom,
+      summaryIsTopmost: summary.contains(pointTarget),
+      selectedOverlapsSummary:
+        selectedRect.bottom > summaryRect.top && selectedRect.top < summaryRect.bottom,
+    };
+  });
+  await page.screenshot({ path: path.join(qaRoot, 'layer-order-open-no-overlap.png') });
+
+  const layerFlowVisibility = [];
+  for (const selector of ['#common-fixes', '#before-after-toggle', '.layer-save-bar', '#layer-order-details']) {
+    await page.evaluate((targetSelector) => {
+      const panel = document.querySelector('.control-panel');
+      const target = document.querySelector(targetSelector);
+      if (!panel || !target) return;
+      const panelRect = panel.getBoundingClientRect();
+      const targetRect = target.getBoundingClientRect();
+      panel.scrollTop += targetRect.top - panelRect.top;
+    }, selector);
+    await page.evaluate(() => new Promise((resolve) => requestAnimationFrame(resolve)));
+    layerFlowVisibility.push(await page.evaluate((targetSelector) => {
+      const panel = document.querySelector('.control-panel');
+      const target = document.querySelector(targetSelector);
+      const selectedCard = document.querySelector('#selected-layer-card');
+      if (!panel || !target || !selectedCard) return { selector: targetSelector, visible: false };
+      const panelRect = panel.getBoundingClientRect();
+      const targetRect = target.getBoundingClientRect();
+      const selectedRect = selectedCard.getBoundingClientRect();
+      const pointTarget = document.elementFromPoint(
+        targetRect.left + Math.min(18, targetRect.width / 2),
+        Math.max(panelRect.top + 8, targetRect.top + 8),
+      );
+      return {
+        selector: targetSelector,
+        visible:
+          targetRect.top >= panelRect.top - 1 &&
+          targetRect.top < panelRect.bottom &&
+          target.contains(pointTarget),
+        selectedCardOutOfTheWay: selectedRect.bottom <= targetRect.top + 1,
+      };
+    }, selector));
+  }
+
+  const dragOrderBefore = await page.evaluate(() => window.rigQa.getLayerEditorState().currentOrder);
+  const dragSourceHandle = page.locator('.layer-order-item .layer-drag-handle').nth(0);
+  const dragTargetRow = page.locator('.layer-order-item').nth(2);
+  await dragTargetRow.evaluate((row) => {
+    const panel = document.querySelector('.control-panel');
+    if (!panel) return;
+    const panelRect = panel.getBoundingClientRect();
+    const rowRect = row.getBoundingClientRect();
+    panel.scrollTop += rowRect.top - panelRect.top - panelRect.height / 2;
+  });
+  const dragSourceBox = await dragSourceHandle.boundingBox();
+  const dragTargetBox = await dragTargetRow.boundingBox();
+  if (!dragSourceBox || !dragTargetBox) throw new Error('Layer drag controls were not visible.');
+  await page.mouse.move(
+    dragSourceBox.x + dragSourceBox.width / 2,
+    dragSourceBox.y + dragSourceBox.height / 2,
+  );
+  await page.mouse.down();
+  await page.mouse.move(
+    dragSourceBox.x + dragSourceBox.width / 2 + 12,
+    dragSourceBox.y + dragSourceBox.height / 2 + 12,
+    { steps: 5 },
+  );
+  await page.mouse.move(
+    dragTargetBox.x + dragTargetBox.width / 2,
+    dragTargetBox.y + dragTargetBox.height - 4,
+    { steps: 12 },
+  );
+  await page.waitForFunction(() => document.querySelector('.layer-drop-indicator'));
+  await page.waitForTimeout(160);
+  const layerOrderDragging = await page.evaluate(() => ({
+    bodyState: document.body.dataset.layerOrderDragging,
+    indicatorText: document.querySelector('.layer-drop-indicator')?.textContent,
+    grabbedRows: document.querySelectorAll('.layer-order-item[aria-grabbed="true"]').length,
+    selectedRows: document.querySelectorAll('.layer-order-item[aria-selected="true"]').length,
+    sourceOpacity: Number(getComputedStyle(document.querySelector('.layer-order-item[aria-grabbed="true"]')).opacity),
+    sourceRowDraggable: document.querySelector('.layer-order-item[aria-grabbed="true"]')?.draggable,
+    sourceHandleDraggable: document.querySelector('.layer-order-item[aria-grabbed="true"] .layer-drag-handle')?.draggable,
+    instruction: document.querySelector('.layer-order-instruction')?.textContent,
+  }));
+  await page.screenshot({ path: path.join(qaRoot, 'layer-order-drag-target.png') });
+  await page.mouse.up();
+  await page.waitForFunction(
+    () => window.rigQa.getLayerEditorState().dirty === true,
+    null,
+    { timeout: 30_000 },
+  );
+  await page.waitForFunction(() => document.body.dataset.layerProcessing !== 'true');
+  const layerOrderDropped = await page.evaluate(() => ({
+    state: window.rigQa.getLayerEditorState(),
+    dragging: document.body.dataset.layerOrderDragging,
+    indicatorCount: document.querySelectorAll('.layer-drop-indicator').length,
+    announcement: document.querySelector('#layer-edit-status')?.textContent,
+  }));
+
+  await page.locator('.layer-order-item .layer-drag-handle').first().dispatchEvent('pointerdown', {
+    pointerType: 'touch',
+    pointerId: 7,
+    isPrimary: true,
+    bubbles: true,
+  });
+  const layerOrderTouchNotice = await page.evaluate(() => ({
+    hidden: document.querySelector('#layer-order-touch-notice')?.hidden,
+    text: document.querySelector('#layer-order-touch-notice')?.textContent,
+    role: document.querySelector('#layer-order-touch-notice')?.getAttribute('role'),
+    ariaLive: document.querySelector('#layer-order-touch-notice')?.getAttribute('aria-live'),
+  }));
+  await page.screenshot({ path: path.join(qaRoot, 'layer-order-touch-notice.png') });
+
+  await page.click('#reset-layer-edit');
+  await page.waitForFunction(
+    () => window.rigQa.getLayerEditorState().dirty === false,
+    null,
+    { timeout: 30_000 },
+  );
+  await page.waitForFunction(() => document.body.dataset.layerProcessing !== 'true');
+  const layerOrderResetAfterDrag = await page.evaluate(() => window.rigQa.getLayerEditorState());
+
+  await clickCanvasModelPoint(page, 128, 145);
+  await page.waitForFunction(() => window.rigQa.getLayerEditorState().selectedLayer === 'face');
+  const layerEditorCanvasSelection = await page.evaluate(() => ({
+    state: window.rigQa.getLayerEditorState(),
+    selectedName: document.querySelector('#selected-layer-name')?.textContent,
+    selectedBadge: document.querySelector('#selected-part-badge')?.textContent,
+    markerHidden: document.querySelector('#canvas-selection-marker')?.hidden,
+    candidateMenuHidden: document.querySelector('#canvas-pick-menu')?.hidden,
+    candidateCount: document.querySelectorAll('#canvas-pick-options button').length,
+    selectedRows: document.querySelectorAll('.layer-order-item[aria-selected="true"]').length,
+    frontDisabled: document.querySelector('#move-layer-front')?.disabled,
+    backDisabled: document.querySelector('#move-layer-back')?.disabled,
+  }));
+  await page.screenshot({ path: path.join(qaRoot, 'layer-editor-canvas-selected.png') });
+  await page.waitForFunction(
+    () => window.rigQa.getLayerEditorState().layerFocus === null,
+    null,
+    { timeout: 2_000 },
+  );
+  await page.evaluate(() => new Promise((resolve) =>
+    requestAnimationFrame(() => requestAnimationFrame(resolve)),
+  ));
+  const layerEditorFocusReleased = await page.evaluate(() => ({
+    state: window.rigQa.getLayerEditorState(),
+    markerHidden: document.querySelector('#canvas-selection-marker')?.hidden,
+    selectedBadge: document.querySelector('#selected-part-badge')?.textContent,
+  }));
+  await page.screenshot({ path: path.join(qaRoot, 'layer-editor-canvas-selected-settled.png') });
+
+  await clickCanvasModelPoint(page, 6, 6);
+  const layerEditorEmptyClick = await page.evaluate(() => ({
+    selectedLayer: window.rigQa.getLayerEditorState().selectedLayer,
+    title: document.querySelector('#canvas-pick-title')?.textContent,
+    menuHidden: document.querySelector('#canvas-pick-menu')?.hidden,
+  }));
+
+  await page.evaluate(() => window.rigQa.setViewTransform(22, -14, 1.35));
+  await clickCanvasModelPoint(page, 128, 145);
+  const zoomedCanvasSelection = await page.evaluate(() => window.rigQa.getLayerEditorState().selectedLayer);
+  await page.evaluate(() => window.rigQa.setViewTransform(0, 0, 0.9));
+
+  await clickCanvasModelPoint(page, 55, 180);
+  await page.waitForFunction(() => window.rigQa.getLayerEditorState().selectedLayer === 'handwear');
+  await page.waitForFunction(
+    () => window.rigQa.getLayerEditorState().layerFocus === null,
+    null,
+    { timeout: 2_000 },
+  );
+  await page.evaluate(() => new Promise((resolve) =>
+    requestAnimationFrame(() => requestAnimationFrame(resolve)),
+  ));
+  const layerEditorHandSelection = await page.evaluate(() => ({
+    selectedLayer: window.rigQa.getLayerEditorState().selectedLayer,
+    selectedName: document.querySelector('#selected-layer-name')?.textContent,
+    markerHidden: document.querySelector('#canvas-selection-marker')?.hidden,
+  }));
+  await page.evaluate(() => {
+    const canvas = document.querySelector('#rig-canvas');
+    const gl = canvas.getContext('webgl');
+    const pixels = new Uint8Array(canvas.width * canvas.height * 4);
+    gl.readPixels(0, 0, canvas.width, canvas.height, gl.RGBA, gl.UNSIGNED_BYTE, pixels);
+    window.__still2rigLayerOriginalFrame = pixels;
+  });
+  await page.screenshot({ path: path.join(qaRoot, 'layer-editor-hand-selected.png') });
+
+  await page.getByRole('button', { name: '服の手前にする' }).click();
+  await page.waitForFunction(
+    () => window.rigQa.getLayerEditorState().dirty === true,
+    null,
+    { timeout: 30_000 },
+  );
+  await page.waitForFunction(() => document.body.dataset.layerProcessing !== 'true');
+  const layerEditorChanged = await page.evaluate(() => ({
+    state: window.rigQa.getLayerEditorState(),
+    status: document.querySelector('#status')?.textContent,
+    phase: document.querySelector('#phase')?.textContent,
+    saveDisabled: document.querySelector('#save-layer-edit')?.disabled,
+    announcement: document.querySelector('#layer-edit-status')?.textContent,
+    processingActive: document.body.dataset.layerProcessing,
+    processingAriaHidden: document.querySelector('#layer-processing-overlay')?.getAttribute('aria-hidden'),
+  }));
+  const layerEditorVisualChange = await page.evaluate(() => {
+    const canvas = document.querySelector('#rig-canvas');
+    const gl = canvas.getContext('webgl');
+    const before = window.__still2rigLayerOriginalFrame;
+    const after = new Uint8Array(canvas.width * canvas.height * 4);
+    gl.readPixels(0, 0, canvas.width, canvas.height, gl.RGBA, gl.UNSIGNED_BYTE, after);
+    let changedPixels = 0;
+    for (let offset = 0; offset < after.length; offset += 4) {
+      if (
+        after[offset] !== before[offset] ||
+        after[offset + 1] !== before[offset + 1] ||
+        after[offset + 2] !== before[offset + 2] ||
+        after[offset + 3] !== before[offset + 3]
+      ) changedPixels += 1;
+    }
+    return { changedPixelRatio: changedPixels / (canvas.width * canvas.height) };
+  });
+  await page.screenshot({ path: path.join(qaRoot, 'layer-editor-changed.png') });
+
+  await page.click('#before-after-toggle');
+  await page.waitForFunction(
+    () => window.rigQa.getLayerEditorState().showingOriginal === true,
+    null,
+    { timeout: 30_000 },
+  );
+  await page.waitForTimeout(500);
+  const layerEditorOriginalPreview = await page.evaluate(() => ({
+    state: window.rigQa.getLayerEditorState(),
+    previewBadge: document.querySelector('#preview-mode-badge')?.textContent,
+    moveDisabled: document.querySelector('#move-layer-back')?.disabled,
+    toggleLabel: document.querySelector('#before-after-toggle')?.textContent,
+    badgeBackground: getComputedStyle(document.querySelector('#preview-mode-badge')).backgroundColor,
+  }));
+  const layerEditorOriginalMatch = await page.evaluate(() => {
+    const canvas = document.querySelector('#rig-canvas');
+    const gl = canvas.getContext('webgl');
+    const expected = window.__still2rigLayerOriginalFrame;
+    const actual = new Uint8Array(canvas.width * canvas.height * 4);
+    gl.readPixels(0, 0, canvas.width, canvas.height, gl.RGBA, gl.UNSIGNED_BYTE, actual);
+    let changedPixels = 0;
+    for (let offset = 0; offset < actual.length; offset += 4) {
+      if (
+        actual[offset] !== expected[offset] ||
+        actual[offset + 1] !== expected[offset + 1] ||
+        actual[offset + 2] !== expected[offset + 2] ||
+        actual[offset + 3] !== expected[offset + 3]
+      ) changedPixels += 1;
+    }
+    return { changedPixelRatio: changedPixels / (canvas.width * canvas.height) };
+  });
+  await page.screenshot({ path: path.join(qaRoot, 'layer-editor-original-preview.png') });
+  await page.click('#before-after-toggle');
+  await page.waitForFunction(
+    () => window.rigQa.getLayerEditorState().showingOriginal === false,
+    null,
+    { timeout: 30_000 },
+  );
+  await page.waitForTimeout(500);
+
+  const downloadPromise = page.waitForEvent('download');
+  await page.click('#save-layer-edit');
+  const download = await downloadPromise;
+  const downloadedPath = await download.path();
+  if (!downloadedPath) throw new Error('Edited PSD download did not provide a file path.');
+  await page.waitForFunction(() => document.body.dataset.layerProcessing !== 'true');
+  const savedPsd = readPsd(new Uint8Array(await fs.readFile(downloadedPath)), {
+    skipLayerImageData: true,
+    skipCompositeImageData: true,
+    skipThumbnail: true,
+  });
+  const layerEditorSaved = await page.evaluate(() => ({
+    state: window.rigQa.getLayerEditorState(),
+    status: document.querySelector('#status')?.textContent,
+    message: document.querySelector('#layer-edit-status')?.textContent,
+  }));
+  const downloadedLayerNames = (savedPsd.children ?? []).map((layer) => layer.name);
 
   await page.goto(baseUrl, { waitUntil: 'domcontentloaded' });
   await page.waitForFunction(
@@ -365,7 +756,140 @@ try {
     };
   });
   await mobilePage.screenshot({ path: path.join(qaRoot, 'mobile-loaded.png'), fullPage: true });
+  await mobilePage.click('#layer-edit-tab');
+  await mobilePage.waitForTimeout(220);
+  await mobilePage.evaluate(() => window.rigQa.setLayerProcessingPreview(true));
+  await mobilePage.waitForFunction(
+    () => Number(getComputedStyle(document.querySelector('#layer-processing-overlay')).opacity) > 0.95,
+    null,
+    { timeout: 2_000 },
+  );
+  const mobileLayerProcessing = await mobilePage.evaluate(() => {
+    const canvas = document.querySelector('#rig-canvas')?.getBoundingClientRect();
+    const overlay = document.querySelector('#layer-processing-overlay')?.getBoundingClientRect();
+    const card = document.querySelector('.layer-processing-card')?.getBoundingClientRect();
+    return {
+      active: document.body.dataset.layerProcessing,
+      viewportWidth: window.innerWidth,
+      scrollWidth: document.documentElement.scrollWidth,
+      opacity: Number(getComputedStyle(document.querySelector('#layer-processing-overlay')).opacity),
+      title: document.querySelector('#layer-processing-title')?.textContent,
+      boundsDifference: canvas && overlay ? {
+        left: Math.abs(canvas.left - overlay.left),
+        top: Math.abs(canvas.top - overlay.top),
+        width: Math.abs(canvas.width - overlay.width),
+        height: Math.abs(canvas.height - overlay.height),
+      } : null,
+      cardInsideOverlay: Boolean(card && overlay &&
+        card.left >= overlay.left && card.right <= overlay.right &&
+        card.top >= overlay.top && card.bottom <= overlay.bottom),
+    };
+  });
+  await mobilePage.screenshot({ path: path.join(qaRoot, 'mobile-layer-processing.png'), fullPage: true });
+  await mobilePage.evaluate(() => window.rigQa.setLayerProcessingPreview(false));
+  const mobileFacePoint = await canvasClientPoint(mobilePage, 128, 145);
+  await mobilePage.touchscreen.tap(mobileFacePoint.x, mobileFacePoint.y);
+  await mobilePage.waitForFunction(
+    () => window.rigQa.getLayerEditorState().selectedLayer === 'face',
+  );
+  const mobileCanvasSelection = await mobilePage.evaluate(() => ({
+    selectedLayer: window.rigQa.getLayerEditorState().selectedLayer,
+    selectedName: document.querySelector('#selected-layer-name')?.textContent,
+    markerHidden: document.querySelector('#canvas-selection-marker')?.hidden,
+    candidateCount: document.querySelectorAll('#canvas-pick-options button').length,
+    candidateButtonHeight:
+      document.querySelector('#canvas-pick-options button')?.getBoundingClientRect().height,
+  }));
+  const mobileLayerEditorLayout = await mobilePage.evaluate(() => {
+    const panel = document.querySelector('.control-panel')?.getBoundingClientRect();
+    const frontButton = document.querySelector('#move-layer-front')?.getBoundingClientRect();
+    const backButton = document.querySelector('#move-layer-back')?.getBoundingClientRect();
+    const saveButton = document.querySelector('#save-layer-edit')?.getBoundingClientRect();
+    return {
+      scrollWidth: document.documentElement.scrollWidth,
+      viewportWidth: window.innerWidth,
+      panelWidth: panel?.width,
+      frontButtonHeight: frontButton?.height,
+      backButtonHeight: backButton?.height,
+      saveButtonHeight: saveButton?.height,
+      editorHidden: document.querySelector('#layer-edit-panel')?.hidden,
+      motionHidden: document.querySelector('#motion-panel')?.hidden,
+      detailsOpen: document.querySelector('#layer-order-details')?.open,
+    };
+  });
+  await mobilePage.screenshot({ path: path.join(qaRoot, 'mobile-layer-editor.png'), fullPage: true });
   await mobilePage.close();
+
+  const compactPage = await browser.newPage({ viewport: { width: 1280, height: 720 } });
+  const compactConsoleErrors = [];
+  compactPage.on('console', (message) => {
+    if (message.type() === 'error') compactConsoleErrors.push(message.text());
+  });
+  await compactPage.goto(`${baseUrl}?autoload=0`, { waitUntil: 'domcontentloaded' });
+  await compactPage.waitForFunction(
+    () => document.querySelectorAll('#generated-psd-select option').length > 1,
+  );
+  await compactPage.selectOption('#generated-psd-select', generatedId);
+  await compactPage.waitForFunction(
+    () => window.rigQa?.ready === true && window.rigQa?.error === null,
+    null,
+    { timeout: 30_000 },
+  );
+  await compactPage.click('#layer-edit-tab');
+  await compactPage.waitForTimeout(220);
+  await compactPage.screenshot({ path: path.join(qaRoot, 'layer-editor-1280x720.png') });
+  await clickCanvasModelPoint(compactPage, 128, 145);
+  await compactPage.waitForFunction(
+    () => window.rigQa.getLayerEditorState().selectedLayer === 'face',
+  );
+  const compactSelectionFlow = await compactPage.evaluate(() => {
+    const card = document.querySelector('#selected-layer-card')?.getBoundingClientRect();
+    const frontButton = document.querySelector('#move-layer-front')?.getBoundingClientRect();
+    const backButton = document.querySelector('#move-layer-back')?.getBoundingClientRect();
+    return {
+      selectedLayer: window.rigQa.getLayerEditorState().selectedLayer,
+      cardTop: card?.top,
+      cardBottom: card?.bottom,
+      frontTop: frontButton?.top,
+      frontBottom: frontButton?.bottom,
+      backTop: backButton?.top,
+      backBottom: backButton?.bottom,
+      viewportHeight: window.innerHeight,
+    };
+  });
+  const compactDragStart = await canvasClientPoint(compactPage, 128, 145);
+  await compactPage.mouse.move(compactDragStart.x, compactDragStart.y);
+  await compactPage.mouse.down();
+  await compactPage.mouse.move(compactDragStart.x + 48, compactDragStart.y + 28, { steps: 4 });
+  await compactPage.mouse.up();
+  const compactLayerDrag = await compactPage.evaluate(() => ({
+    selectedLayer: window.rigQa.getLayerEditorState().selectedLayer,
+    view: window.rigQa.getViewTransform(),
+  }));
+  await compactPage.screenshot({ path: path.join(qaRoot, 'layer-editor-1280x720-selected.png') });
+  await compactPage.locator('#save-layer-edit').scrollIntoViewIfNeeded();
+  const compactLayerEditorLayout = await compactPage.evaluate(() => {
+    const panel = document.querySelector('.control-panel');
+    const panelRect = panel?.getBoundingClientRect();
+    const saveButton = document.querySelector('#save-layer-edit')?.getBoundingClientRect();
+    const frontButton = document.querySelector('#move-layer-front')?.getBoundingClientRect();
+    const backButton = document.querySelector('#move-layer-back')?.getBoundingClientRect();
+    return {
+      scrollWidth: document.documentElement.scrollWidth,
+      viewportWidth: window.innerWidth,
+      viewportHeight: window.innerHeight,
+      panelScrollTop: panel?.scrollTop,
+      panelScrollable: Boolean(panel && panel.scrollHeight > panel.clientHeight),
+      panelRight: panelRect?.right,
+      saveTop: saveButton?.top,
+      saveBottom: saveButton?.bottom,
+      frontButtonHeight: frontButton?.height,
+      backButtonHeight: backButton?.height,
+      detailsOpen: document.querySelector('#layer-order-details')?.open,
+    };
+  });
+  await compactPage.screenshot({ path: path.join(qaRoot, 'layer-editor-1280x720-save.png') });
+  await compactPage.close();
 
   const checks = {
     startsWithoutBundledArtwork:
@@ -398,6 +922,133 @@ try {
       initialLayout.stageWidth / initialLayout.viewportWidth > 0.68 &&
       initialLayout.panelWidth <= 400 &&
       Math.abs(initialLayout.headerBottom - initialLayout.stageTop) < 1,
+    layerEditorSeparatesWorkModes:
+      layerEditorInitial.modeLabel === 'true' &&
+      layerEditorInitial.motionHidden === true &&
+      layerEditorInitial.editorHidden === false,
+    layerEditorUsesPlainFrontBackLanguage:
+      layerEditorInitial.topLabel === '手前' &&
+      layerEditorInitial.selectedName === 'まだ選んでいません' &&
+      layerEditorInitial.pickHint === '人物の直したい部分をクリックして選択' &&
+      layerEditorInitial.visibleRows === 15,
+    layerEditorUsesDesktopOnlySelectionGuidance:
+      !layerEditorInitial.pickHint?.match(/^[①-⑳]/) &&
+      !layerEditorInitial.pickHint?.includes('ドラッグで表示位置') &&
+      !layerEditorInitial.selectionCopy.includes('タップ'),
+    layerEditorStartsSafe:
+      layerEditorInitial.state.dirty === false &&
+      layerEditorInitial.state.selectedLayer === null &&
+      layerEditorInitial.frontDisabled === true &&
+      layerEditorInitial.saveDisabled === true,
+    layerProcessingOverlayCoversPreview:
+      layerProcessingDesktop.active === 'true' &&
+      layerProcessingDesktop.ariaHidden === 'false' &&
+      layerProcessingDesktop.canvasBusy === 'true' &&
+      layerProcessingDesktop.stageBusy === 'true' &&
+      layerProcessingDesktop.title === '重なりを変更しています' &&
+      layerProcessingDesktop.detail?.includes('数秒かかることがあります') &&
+      layerProcessingDesktop.opacity > 0.95 &&
+      layerProcessingDesktop.pointerEvents === 'auto' &&
+      layerProcessingDesktop.spinnerAnimation !== 'none' &&
+      layerProcessingDesktop.boundsDifference &&
+      Object.values(layerProcessingDesktop.boundsDifference).every((value) => value < 1),
+    layerProcessingOverlayAlwaysDismisses:
+      layerProcessingDismissed.active === 'false' &&
+      layerProcessingDismissed.ariaHidden === 'true' &&
+      layerProcessingDismissed.canvasBusy === 'false' &&
+      layerProcessingDismissed.opacity === 0,
+    layerPanelScrollDoesNotCoverContent:
+      layerOrderOpenedWithoutOverlap?.panelScrollTop > 0 &&
+      layerOrderOpenedWithoutOverlap.windowScrollY === 0 &&
+      Math.abs(layerOrderOpenedWithoutOverlap.headerTop) < 1 &&
+      Math.abs(layerOrderOpenedWithoutOverlap.headerBottom - layerOrderOpenedWithoutOverlap.panelTop) < 1 &&
+      layerOrderOpenedWithoutOverlap.selectedPosition === 'static' &&
+      layerOrderOpenedWithoutOverlap.selectedBottom <= layerOrderOpenedWithoutOverlap.panelTop + 1 &&
+      layerOrderOpenedWithoutOverlap.summaryTop >= layerOrderOpenedWithoutOverlap.panelTop - 1 &&
+      layerOrderOpenedWithoutOverlap.summaryBottom <= layerOrderOpenedWithoutOverlap.panelBottom &&
+      layerOrderOpenedWithoutOverlap.summaryIsTopmost === true &&
+      layerOrderOpenedWithoutOverlap.selectedOverlapsSummary === false,
+    layerPanelSectionsRemainReachable:
+      layerFlowVisibility.length === 4 &&
+      layerFlowVisibility.every((item) => item.visible && item.selectedCardOutOfTheWay),
+    layerOrderDragShowsClearDropTarget:
+      layerOrderDragging.bodyState === 'true' &&
+      layerOrderDragging.indicatorText === 'ここに移動' &&
+      layerOrderDragging.grabbedRows === 1 &&
+      layerOrderDragging.selectedRows === 1 &&
+      layerOrderDragging.sourceOpacity < 0.6 &&
+      layerOrderDragging.sourceRowDraggable === false &&
+      layerOrderDragging.sourceHandleDraggable === true &&
+      layerOrderDragging.instruction?.includes('右端の点々') &&
+      layerOrderDragging.instruction?.includes('PCのみ'),
+    layerOrderDragCommitsOnlyOnDrop:
+      JSON.stringify(layerOrderDropped.state.currentOrder) !== JSON.stringify(dragOrderBefore) &&
+      layerOrderDropped.state.dirty === true &&
+      layerOrderDropped.dragging === 'false' &&
+      layerOrderDropped.indicatorCount === 0 &&
+      layerOrderDropped.announcement?.includes('重なりを変更しました'),
+    layerOrderTouchExplainsDesktopRequirement:
+      layerOrderTouchNotice.hidden === false &&
+      layerOrderTouchNotice.text?.includes('タッチ操作での並べ替えには対応していません') &&
+      layerOrderTouchNotice.text?.includes('PCのマウス') &&
+      layerOrderTouchNotice.role === 'status' &&
+      layerOrderTouchNotice.ariaLive === 'polite',
+    layerOrderDragCanBeUndoneSafely:
+      layerOrderResetAfterDrag.dirty === false &&
+      JSON.stringify(layerOrderResetAfterDrag.currentOrder) === JSON.stringify(dragOrderBefore),
+    canvasClickSelectsVisibleLayer:
+      layerEditorCanvasSelection.state.selectedLayer === 'face' &&
+      layerEditorCanvasSelection.state.layerFocus === 'face' &&
+      layerEditorCanvasSelection.selectedName === '顔' &&
+      layerEditorCanvasSelection.selectedBadge === '選択中：顔' &&
+      layerEditorCanvasSelection.markerHidden === false &&
+      layerEditorCanvasSelection.candidateMenuHidden === false &&
+      layerEditorCanvasSelection.candidateCount >= 2 &&
+      layerEditorCanvasSelection.selectedRows === 1 &&
+      layerEditorCanvasSelection.frontDisabled === false &&
+      layerEditorCanvasSelection.backDisabled === false,
+    canvasSelectionFocusIsTemporary:
+      layerEditorFocusReleased.state.selectedLayer === 'face' &&
+      layerEditorFocusReleased.state.layerFocus === null &&
+      layerEditorFocusReleased.markerHidden === false &&
+      layerEditorFocusReleased.selectedBadge === '選択中：顔',
+    emptyCanvasClickExplainsNextStep:
+      layerEditorEmptyClick.selectedLayer === 'face' &&
+      layerEditorEmptyClick.menuHidden === false &&
+      layerEditorEmptyClick.title === 'ここには選べる部分がありません',
+    canvasPickingRespectsZoomAndDrag:
+      zoomedCanvasSelection === 'face' &&
+      compactLayerDrag.selectedLayer === 'face' &&
+      Math.abs(compactLayerDrag.view.offsetX) > 5 &&
+      Math.abs(compactLayerDrag.view.offsetY) > 5,
+    canvasClickSelectsArm:
+      layerEditorHandSelection.selectedLayer === 'handwear' &&
+      layerEditorHandSelection.selectedName === '腕・手' &&
+      layerEditorHandSelection.markerHidden === false,
+    layerEditorReordersAndMarksUnsaved:
+      layerEditorChanged.state.dirty === true &&
+      layerEditorChanged.status === '未保存' &&
+      layerEditorChanged.phase === '未保存の変更があります' &&
+      layerEditorChanged.saveDisabled === false &&
+      layerEditorChanged.announcement?.includes('手前へ') &&
+      layerEditorChanged.processingActive === 'false' &&
+      layerEditorChanged.processingAriaHidden === 'true' &&
+      layerEditorVisualChange.changedPixelRatio > 0.001,
+    layerEditorComparesWithoutEditing:
+      layerEditorOriginalPreview.state.showingOriginal === true &&
+      layerEditorOriginalPreview.previewBadge === '変更前' &&
+      layerEditorOriginalPreview.moveDisabled === true &&
+      layerEditorOriginalPreview.toggleLabel === '修正後に戻す' &&
+      layerEditorOriginalPreview.badgeBackground === 'rgb(255, 210, 124)' &&
+      layerEditorOriginalPreview.state.layerFocus === null &&
+      layerEditorOriginalMatch.changedPixelRatio < 0.0001,
+    layerEditorDownloadsVerifiedCopy:
+      download.suggestedFilename() === 'qa-generated-preview-重なり修正版.psd' &&
+      layerEditorSaved.state.dirty === false &&
+      layerEditorSaved.status === '保存済み' &&
+      layerEditorSaved.message?.includes('元のPSDはそのまま') &&
+      JSON.stringify(downloadedLayerNames) ===
+        JSON.stringify(layerEditorChanged.state.currentOrder.map((id) => id.slice(id.indexOf(':') + 1))),
     dropOverlayAppears: overlayVisible,
     localPsdUploadLoads:
       summary?.canvasWidth === 256 &&
@@ -452,8 +1103,49 @@ try {
       mobileLoadedLayout.modelName === `${fixtureJobId}.psd` &&
       mobileLoadedLayout.stageBottom <= mobileLoadedLayout.panelTop + 1 &&
       mobileLoadedLayout.emptyStateOpacity === '0',
+    mobileLayerEditorRemainsUsable:
+      mobileLayerEditorLayout.editorHidden === false &&
+      mobileLayerEditorLayout.motionHidden === true &&
+      mobileLayerEditorLayout.scrollWidth <= mobileLayerEditorLayout.viewportWidth &&
+      mobileLayerEditorLayout.frontButtonHeight >= 44 &&
+      mobileLayerEditorLayout.backButtonHeight >= 44 &&
+      mobileLayerEditorLayout.saveButtonHeight >= 44 &&
+      mobileLayerEditorLayout.detailsOpen === false,
+    mobileTapSelectsVisibleLayer:
+      mobileCanvasSelection.selectedLayer === 'face' &&
+      mobileCanvasSelection.selectedName === '顔' &&
+      mobileCanvasSelection.markerHidden === false &&
+      mobileCanvasSelection.candidateCount >= 2 &&
+      mobileCanvasSelection.candidateButtonHeight >= 44,
+    mobileLayerProcessingFitsPreview:
+      mobileLayerProcessing.active === 'true' &&
+      mobileLayerProcessing.scrollWidth <= mobileLayerProcessing.viewportWidth &&
+      mobileLayerProcessing.opacity > 0.95 &&
+      mobileLayerProcessing.title === '重なりを変更しています' &&
+      mobileLayerProcessing.cardInsideOverlay === true &&
+      mobileLayerProcessing.boundsDifference &&
+      Object.values(mobileLayerProcessing.boundsDifference).every((value) => value < 1),
+    compactSelectionActionsStayVisible:
+      compactSelectionFlow.selectedLayer === 'face' &&
+      compactSelectionFlow.cardTop >= 0 &&
+      compactSelectionFlow.cardBottom <= compactSelectionFlow.viewportHeight &&
+      compactSelectionFlow.frontTop >= 0 &&
+      compactSelectionFlow.frontBottom <= compactSelectionFlow.viewportHeight &&
+      compactSelectionFlow.backTop >= 0 &&
+      compactSelectionFlow.backBottom <= compactSelectionFlow.viewportHeight,
+    compactDesktopLayerEditorRemainsUsable:
+      compactLayerEditorLayout.scrollWidth <= compactLayerEditorLayout.viewportWidth &&
+      compactLayerEditorLayout.panelRight <= compactLayerEditorLayout.viewportWidth &&
+      compactLayerEditorLayout.panelScrollable === true &&
+      compactLayerEditorLayout.panelScrollTop > 0 &&
+      compactLayerEditorLayout.saveTop >= 0 &&
+      compactLayerEditorLayout.saveBottom <= compactLayerEditorLayout.viewportHeight &&
+      compactLayerEditorLayout.frontButtonHeight >= 44 &&
+      compactLayerEditorLayout.backButtonHeight >= 44 &&
+      compactLayerEditorLayout.detailsOpen === false,
     noConsoleErrors: consoleErrors.length === 0,
     noMobileConsoleErrors: mobileConsoleErrors.length === 0,
+    noCompactConsoleErrors: compactConsoleErrors.length === 0,
   };
   const report = {
     pass: Object.values(checks).every(Boolean),
@@ -464,6 +1156,27 @@ try {
     selectedGeneratedState,
     autoLoadedState,
     initialLayout,
+    layerEditorInitial,
+    layerProcessingDesktop,
+    layerProcessingDismissed,
+    layerOrderOpenedWithoutOverlap,
+    layerFlowVisibility,
+    dragOrderBefore,
+    layerOrderDragging,
+    layerOrderDropped,
+    layerOrderTouchNotice,
+    layerOrderResetAfterDrag,
+    layerEditorCanvasSelection,
+    layerEditorFocusReleased,
+    layerEditorEmptyClick,
+    zoomedCanvasSelection,
+    layerEditorHandSelection,
+    layerEditorChanged,
+    layerEditorOriginalPreview,
+    layerEditorVisualChange,
+    layerEditorOriginalMatch,
+    layerEditorSaved,
+    downloadedLayerNames,
     summary,
     autoBlinkDefaultsOn,
     autoBlinkDisabled,
@@ -478,8 +1191,15 @@ try {
     zoom,
     mobileWaitingLayout,
     mobileLoadedLayout,
+    mobileLayerEditorLayout,
+    mobileCanvasSelection,
+    mobileLayerProcessing,
+    compactSelectionFlow,
+    compactLayerDrag,
+    compactLayerEditorLayout,
     consoleErrors,
     mobileConsoleErrors,
+    compactConsoleErrors,
   };
   await fs.writeFile(path.join(qaRoot, 'report.json'), `${JSON.stringify(report, null, 2)}\n`);
   console.log(JSON.stringify(report, null, 2));
