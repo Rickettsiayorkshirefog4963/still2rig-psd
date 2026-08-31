@@ -637,7 +637,7 @@ function pickLayerFromCanvas(clientX: number, clientY: number): void {
   if (candidates.length === 0) {
     canvasSelectionMarker.hidden = true;
     canvasPickTitle.textContent = 'ここには選べる部分がありません';
-    canvasPickCopy.textContent = '人物の色がある場所をクリック／タップするか、右側の「一覧から選ぶ」を使ってください。';
+    canvasPickCopy.textContent = '人物の色がある場所をクリックするか、右側の「一覧から選ぶ」を使ってください。';
     positionCanvasFeedback(clientX, clientY);
     canvasSelectionMarker.hidden = true;
     announceLayerEdit('ここには選べる部分がありません。人物の色がある場所か、一覧から選んでください。');
@@ -880,7 +880,7 @@ function renderLayerEditor(): void {
   selectedLayerName.textContent = selected?.label ?? 'まだ選んでいません';
   selectedLayerHelp.textContent = selected
     ? '水色の印で選んだ部分です。下のボタンで重なりを調整できます。'
-    : '左の人物をクリック／タップすると、ここに部分の名前が表示されます。';
+    : '左の人物をクリックすると、ここに部分の名前が表示されます。';
   moveLayerFront.disabled =
     layerEditBusy || showingOriginal || selectedIndex < 0 || selectedIndex >= currentLayerOrder.length - 1;
   moveLayerBack.disabled = layerEditBusy || showingOriginal || selectedIndex <= 0;
@@ -1152,7 +1152,7 @@ function setWorkspaceMode(mode: WorkspaceMode): void {
     phaseNode.textContent = hasUnsavedLayerChanges()
       ? '未保存の変更があります'
       : '重なりを修正できます';
-    detailNode.textContent = '人物の直したい部分をクリック／タップし、「手前へ」「奥へ」で調整してください。';
+    detailNode.textContent = '人物の直したい部分をクリックし、「手前へ」「奥へ」で調整してください。';
   } else {
     hideCanvasPickMenu(true);
     clearLayerFocus();

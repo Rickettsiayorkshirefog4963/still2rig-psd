@@ -58,7 +58,7 @@ browsing. Symlinks in output directories are not served.
 - PSD drag-and-drop and file-picker input
 - Separate **Check motion** and **Fix overlaps** work modes
 - Plain-language front/back fixes for arms, clothing, face, and front hair
-- Alpha-aware canvas click/tap selection with overlap candidates and visible selection feedback
+- Alpha-aware canvas click selection with overlap candidates and visible selection feedback
 - One-step front/back movement, desktop drag sorting with a visible insertion target,
   undo, reset, and original/edited comparison
 - Preview-local progress feedback for slower PSD rebuild, comparison, and export work
@@ -113,7 +113,7 @@ npm run preview
 開くと、顔や体の向き、目・眉、口、髪・物理の計32項目を、スライダーと数値入力で
 調整できます。各項目には最初の値を表示し、「最初の値に戻す」でまとめて元に戻せます。
 
-「重なりを直す」では、人物上の直したい部分をクリックまたはタップして選べます。
+「重なりを直す」では、人物上の直したい部分をクリックして選べます。
 複数の部分が重なる場所では候補を表示します。PSDの専門用語を使わず「腕・手を服の手前／奥へ」
 「前髪を顔の手前／奥へ」のように前後関係を変更できます。変更前との比較、1つ戻す、
 今回の変更の取り消し、PCのマウスによる細かいドラッグ並べ替えにも対応します。保存時は元のPSDを上書きせず、

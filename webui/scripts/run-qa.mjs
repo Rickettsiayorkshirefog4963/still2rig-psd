@@ -177,6 +177,11 @@ try {
     saveDisabled: document.querySelector('#save-layer-edit')?.disabled,
     frontDisabled: document.querySelector('#move-layer-front')?.disabled,
     pickHint: document.querySelector('.layer-canvas-hint')?.textContent,
+    selectionCopy: [
+      document.querySelector('.layer-canvas-hint')?.textContent,
+      document.querySelector('.layer-selection-step')?.textContent,
+      document.querySelector('#selected-layer-help')?.textContent,
+    ].join(' '),
     selectedCardTop: document.querySelector('#selected-layer-card')?.getBoundingClientRect().top,
     selectedCardBottom: document.querySelector('#selected-layer-card')?.getBoundingClientRect().bottom,
     viewportHeight: window.innerHeight,
@@ -924,8 +929,12 @@ try {
     layerEditorUsesPlainFrontBackLanguage:
       layerEditorInitial.topLabel === '手前' &&
       layerEditorInitial.selectedName === 'まだ選んでいません' &&
-      layerEditorInitial.pickHint?.includes('クリック／タップして選択') &&
+      layerEditorInitial.pickHint === '人物の直したい部分をクリックして選択' &&
       layerEditorInitial.visibleRows === 15,
+    layerEditorUsesDesktopOnlySelectionGuidance:
+      !layerEditorInitial.pickHint?.match(/^[①-⑳]/) &&
+      !layerEditorInitial.pickHint?.includes('ドラッグで表示位置') &&
+      !layerEditorInitial.selectionCopy.includes('タップ'),
     layerEditorStartsSafe:
       layerEditorInitial.state.dirty === false &&
       layerEditorInitial.state.selectedLayer === null &&
