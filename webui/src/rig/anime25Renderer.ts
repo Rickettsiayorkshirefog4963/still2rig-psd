@@ -71,6 +71,8 @@ interface RenderLayer extends Anime25RigLayer {
   };
   base: Float32Array;
   cur: Float32Array;
+  uv: Float32Array;
+  indices: Uint16Array;
   bn: string;
   nIdx: number;
   tex: WebGLTexture;
@@ -102,6 +104,9 @@ export interface Anime25RigAvatar {
   setMotionProfile: (profile: PsdMotionProfile) => void;
   getEyeOpen: () => { left: number; right: number };
   getAverageFps: () => number;
+  setLayerFocus: (name: string | null) => void;
+  getLayerFocus: () => string | null;
+  pickLayersAt: (canvasX: number, canvasY: number) => string[];
   dispose: () => void;
 }
 
@@ -344,8 +349,11 @@ function createRenderLayer(
     }
   }
 
+  const typedIndices = new Uint16Array(indices);
   layer.base = base;
   layer.cur = new Float32Array(base);
+  layer.uv = uv;
+  layer.indices = typedIndices;
   layer.nIdx = indices.length;
 
   if (layer.strands?.length) {
@@ -422,7 +430,7 @@ function createRenderLayer(
   gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, layer.ibo);
   gl.bufferData(
     gl.ELEMENT_ARRAY_BUFFER,
-    new Uint16Array(indices),
+    typedIndices,
     gl.STATIC_DRAW,
   );
 
@@ -509,6 +517,7 @@ export function createAnime25RigAvatar(
   let viewScale = 1;
   const dragInertia = { x: 0, y: 0, vx: 0, vy: 0, targetX: 0, targetY: 0, active: false };
   let averageFps = 0;
+  let focusedLayer: string | null = null;
   let fpsFrames = 0;
   let fpsStart = last;
   const randomTarget = { ax: 0, ay: 0, az: 0, bd: 0, ex: 0, ey: 0 };
@@ -516,6 +525,56 @@ export function createAnime25RigAvatar(
   const target = { ...DEFAULT_PARAMS };
   const current = { ...DEFAULT_PARAMS };
   const bounce = { x: 0, v: 0, dy: 0 };
+
+  function pointInTriangle(
+    px: number,
+    py: number,
+    ax: number,
+    ay: number,
+    bx: number,
+    by: number,
+    cx: number,
+    cy: number,
+  ): [number, number, number] | null {
+    const denominator = (by - cy) * (ax - cx) + (cx - bx) * (ay - cy);
+    if (Math.abs(denominator) < 1e-8) return null;
+    const a = ((by - cy) * (px - cx) + (cx - bx) * (py - cy)) / denominator;
+    const b = ((cy - ay) * (px - cx) + (ax - cx) * (py - cy)) / denominator;
+    const c = 1 - a - b;
+    const epsilon = -0.0001;
+    return a >= epsilon && b >= epsilon && c >= epsilon ? [a, b, c] : null;
+  }
+
+  function layerContainsPoint(layer: RenderLayer, x: number, y: number): boolean {
+    for (let index = 0; index < layer.indices.length; index += 3) {
+      const ia = layer.indices[index]!;
+      const ib = layer.indices[index + 1]!;
+      const ic = layer.indices[index + 2]!;
+      const weights = pointInTriangle(
+        x,
+        y,
+        layer.cur[ia * 2]!,
+        layer.cur[ia * 2 + 1]!,
+        layer.cur[ib * 2]!,
+        layer.cur[ib * 2 + 1]!,
+        layer.cur[ic * 2]!,
+        layer.cur[ic * 2 + 1]!,
+      );
+      if (!weights) continue;
+      const u =
+        layer.uv[ia * 2]! * weights[0] +
+        layer.uv[ib * 2]! * weights[1] +
+        layer.uv[ic * 2]! * weights[2];
+      const v =
+        layer.uv[ia * 2 + 1]! * weights[0] +
+        layer.uv[ib * 2 + 1]! * weights[1] +
+        layer.uv[ic * 2 + 1]! * weights[2];
+      const imageX = clamp(Math.round(u * (layer.img.width - 1)), 0, layer.img.width - 1);
+      const imageY = clamp(Math.round(v * (layer.img.height - 1)), 0, layer.img.height - 1);
+      if (layer.img.data[(imageY * layer.img.width + imageX) * 4 + 3]! >= 24) return true;
+    }
+    return false;
+  }
 
   function deform(layer: RenderLayer, params: MotionParams) {
     const base = layer.base;
@@ -934,7 +993,9 @@ export function createAnime25RigAvatar(
         continue;
       }
       deform(layer, params);
-      gl.uniform1f(locAlpha, alpha);
+      const focusAlpha =
+        focusedLayer && layer.bn !== focusedLayer ? 0.2 : 1;
+      gl.uniform1f(locAlpha, alpha * focusAlpha);
       gl.bindBuffer(gl.ARRAY_BUFFER, layer.vboPos);
       gl.bufferData(gl.ARRAY_BUFFER, layer.cur, gl.DYNAMIC_DRAW);
       gl.vertexAttribPointer(locPos, 2, gl.FLOAT, false, 0, 0);
@@ -1050,6 +1111,26 @@ export function createAnime25RigAvatar(
     },
     getAverageFps() {
       return averageFps;
+    },
+    setLayerFocus(name) {
+      focusedLayer = name;
+    },
+    getLayerFocus() {
+      return focusedLayer;
+    },
+    pickLayersAt(canvasX, canvasY) {
+      const modelX =
+        (canvasX - canvasWidth * 0.5 - viewOffsetX) / viewScale + canvasWidth * 0.5;
+      const modelY =
+        (canvasY - canvasHeight * 0.5 - viewOffsetY) / viewScale + canvasHeight * 0.5;
+      const matches: string[] = [];
+      for (let index = layers.length - 1; index >= 0; index -= 1) {
+        const layer = layers[index]!;
+        if (fadeAlpha(layer, current, hasEyeClose) < 0.08) continue;
+        if (!layerContainsPoint(layer, modelX, modelY)) continue;
+        if (!matches.includes(layer.bn)) matches.push(layer.bn);
+      }
+      return matches;
     },
     dispose() {
       disposed = true;

@@ -28,7 +28,9 @@ Colab connection approval.
   approval-gated control of a Google Colab notebook
 - Local tools for hash verification, layer cleanup, deterministic PSD assembly,
   and structural QA
-- A built-in WebUI for blink, mouth, body, hair, drag, and zoom previews
+- A built-in WebUI for blink, mouth, body, hair, drag, and zoom previews, plus
+  plain-language front/back overlap repair, before/after comparison, progress
+  feedback for slower PSD rebuilds, and safe export
 
 ## Quick start
 
@@ -106,6 +108,11 @@ npm run preview
 Open the printed local URL. The WebUI lists generated PSDs from
 `.still2rig-psd/jobs/*/output/`, selects the newest result, and also accepts a
 local PSD through file selection or drag-and-drop.
+The **Fix overlaps** mode supports alpha-aware canvas selection, offers candidates
+when multiple parts overlap, moves parts forward or backward, compares the edit
+with the source, supports detailed mouse-based drag sorting on desktop, and
+downloads a verified copy without overwriting the original PSD. Touch-based layer
+sorting on phones is not supported.
 
 ## Automation and consent boundaries
 

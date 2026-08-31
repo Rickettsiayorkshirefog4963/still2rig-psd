@@ -80,6 +80,11 @@ const line = [68, 36, 30, 255];
 
 const children = [
   makeLayer('back hair', (data) => ellipse(data, 128, 94, 99, 90, hairBack)),
+  makeLayer('handwear', (data) => {
+    rectangle(data, 48, 170, 82, 245, skin);
+    rectangle(data, 174, 170, 208, 245, skin);
+    rectangle(data, 66, 196, 190, 218, skin);
+  }),
   makeLayer('topwear', (data) => {
     ellipse(data, 128, 244, 96, 82, shirt);
     rectangle(data, 62, 190, 194, 255, shirt);
