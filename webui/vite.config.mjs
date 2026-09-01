@@ -1,5 +1,6 @@
 import fs from 'node:fs';
 import path from 'node:path';
+import { spawn } from 'node:child_process';
 
 import { defineConfig } from 'vite';
 
@@ -50,17 +51,119 @@ function listGeneratedPsds() {
   );
 }
 
-function sendJson(response, value) {
+function sendJson(response, value, statusCode = 200) {
   const body = JSON.stringify(value);
-  response.statusCode = 200;
+  response.statusCode = statusCode;
   response.setHeader('Content-Type', 'application/json; charset=utf-8');
   response.setHeader('Cache-Control', 'no-store');
   response.end(body);
 }
 
+function readJsonBody(request) {
+  return new Promise((resolve, reject) => {
+    let body = '';
+    let tooLarge = false;
+    request.setEncoding('utf8');
+    request.on('data', (chunk) => {
+      if (tooLarge) return;
+      body += chunk;
+      if (body.length > 4096) {
+        body = '';
+        tooLarge = true;
+      }
+    });
+    request.on('end', () => {
+      if (tooLarge) {
+        reject(new Error('Request body is too large.'));
+        return;
+      }
+      try {
+        resolve(JSON.parse(body));
+      } catch {
+        reject(new Error('Request body is not valid JSON.'));
+      }
+    });
+    request.on('error', reject);
+  });
+}
+
+function isTrustedOpenFolderRequest(request) {
+  if (request.headers['x-still2rig-action'] !== 'open-generated-folder') return false;
+  const origin = request.headers.origin;
+  if (!origin) {
+    const fetchSite = request.headers['sec-fetch-site'];
+    return !fetchSite || fetchSite === 'same-origin' || fetchSite === 'none';
+  }
+  try {
+    return new URL(origin).host === request.headers.host;
+  } catch {
+    return false;
+  }
+}
+
+function openDirectory(directory) {
+  if (process.env.STILL2RIG_PSD_OPEN_FOLDER_DRY_RUN === '1') return Promise.resolve();
+  const command = process.platform === 'darwin'
+    ? { file: 'open', args: [directory] }
+    : process.platform === 'win32'
+      ? { file: 'explorer.exe', args: [directory] }
+      : process.platform === 'linux'
+        ? { file: 'xdg-open', args: [directory] }
+        : null;
+  if (!command) return Promise.reject(new Error(`Unsupported platform: ${process.platform}`));
+  return new Promise((resolve, reject) => {
+    const child = spawn(command.file, command.args, {
+      detached: true,
+      stdio: 'ignore',
+      windowsHide: true,
+    });
+    child.once('error', reject);
+    child.once('spawn', () => {
+      child.unref();
+      resolve();
+    });
+  });
+}
+
+async function openGeneratedPsdFolder(request, response) {
+  if (!isTrustedOpenFolderRequest(request)) {
+    sendJson(response, { error: 'この操作を受け付けられませんでした。' }, 403);
+    return;
+  }
+  let payload;
+  try {
+    payload = await readJsonBody(request);
+  } catch {
+    sendJson(response, { error: '選択したPSDを確認できませんでした。' }, 400);
+    return;
+  }
+  if (!payload || typeof payload.id !== 'string') {
+    sendJson(response, { error: '生成済みPSDを選択してください。' }, 400);
+    return;
+  }
+  const item = listGeneratedPsds().find((candidate) => candidate.id === payload.id);
+  if (!item) {
+    sendJson(response, { error: '選択したPSDが見つかりませんでした。' }, 404);
+    return;
+  }
+  try {
+    await openDirectory(path.dirname(item.file));
+    sendJson(response, { ok: true });
+  } catch {
+    sendJson(response, { error: '保存先を開けませんでした。' }, 500);
+  }
+}
+
 function generatedPsdMiddleware(request, response, next) {
-  if (request.method !== 'GET' && request.method !== 'HEAD') return next();
   const requestUrl = new URL(request.url ?? '/', 'http://127.0.0.1');
+  if (
+    request.method === 'POST' &&
+    requestUrl.pathname === '/api/generated-psds/open-folder'
+  ) {
+    void openGeneratedPsdFolder(request, response);
+    return;
+  }
+  if (request.method !== 'GET' && request.method !== 'HEAD') return next();
   if (requestUrl.pathname === '/api/generated-psds') {
     const publicItems = listGeneratedPsds().map(({ file: _file, ...item }) => item);
     sendJson(response, { items: publicItems });

@@ -94,6 +94,7 @@ const statusNode = requireElement<HTMLElement>('#status');
 const reportNode = requireElement<HTMLElement>('#report');
 const generatedPsdSelect = requireElement<HTMLSelectElement>('#generated-psd-select');
 const generatedPsdRefresh = requireElement<HTMLButtonElement>('#generated-psd-refresh');
+const generatedPsdOpenFolder = requireElement<HTMLButtonElement>('#generated-psd-open-folder');
 const generatedPsdNote = requireElement<HTMLElement>('#generated-psd-note');
 const psdFileInput = requireElement<HTMLInputElement>('#psd-file-input');
 const dropOverlay = requireElement<HTMLElement>('#drop-overlay');
@@ -1485,6 +1486,7 @@ async function loadLocalPsd(file: File): Promise<void> {
   if (!confirmDiscardLayerChanges()) return;
   generatedPsdSelect.value = '';
   activeGeneratedPsdId = '';
+  generatedPsdOpenFolder.disabled = true;
   const buffer = await file.arrayBuffer();
   initializeLayerEditor(buffer, file.name);
   setWorkspaceMode('motion');
@@ -1512,10 +1514,42 @@ async function loadGeneratedPsd(item: GeneratedPsd): Promise<void> {
   await activatePsd(buffer, item.name);
   generatedPsdSelect.value = item.id;
   activeGeneratedPsdId = item.id;
+  generatedPsdOpenFolder.disabled = false;
+}
+
+async function openGeneratedPsdFolder(): Promise<void> {
+  const item = generatedPsds.find((candidate) => candidate.id === generatedPsdSelect.value);
+  if (!item) return;
+  generatedPsdOpenFolder.disabled = true;
+  const previousLabel = generatedPsdOpenFolder.textContent;
+  generatedPsdOpenFolder.textContent = '開いています…';
+  try {
+    const response = await fetch('/api/generated-psds/open-folder', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'X-Still2Rig-Action': 'open-generated-folder',
+      },
+      body: JSON.stringify({ id: item.id }),
+    });
+    const payload = await response.json() as { ok?: boolean; error?: string };
+    if (!response.ok || !payload.ok) {
+      throw new Error(payload.error || `保存先を開けませんでした（${response.status}）。`);
+    }
+    generatedPsdNote.textContent = `${item.name} の保存先を開きました。`;
+  } catch (error) {
+    generatedPsdNote.textContent = error instanceof Error ? error.message : String(error);
+  } finally {
+    generatedPsdOpenFolder.textContent = previousLabel;
+    generatedPsdOpenFolder.disabled = !generatedPsds.some(
+      (candidate) => candidate.id === generatedPsdSelect.value,
+    );
+  }
 }
 
 async function refreshGeneratedPsdList(autoLoad = false): Promise<void> {
   generatedPsdRefresh.disabled = true;
+  generatedPsdOpenFolder.disabled = true;
   generatedPsdNote.textContent = '生成済みPSDを検索しています…';
   try {
     const response = await fetch('/api/generated-psds', { cache: 'no-store' });
@@ -1542,6 +1576,7 @@ async function refreshGeneratedPsdList(autoLoad = false): Promise<void> {
       : '生成が完了したPSDはここへ自動的に表示されます。';
     if (generatedPsds.some((item) => item.id === previousValue)) {
       generatedPsdSelect.value = previousValue;
+      generatedPsdOpenFolder.disabled = false;
     }
     if (autoLoad && generatedPsds[0]) {
       await loadGeneratedPsd(generatedPsds[0]);
@@ -1551,6 +1586,7 @@ async function refreshGeneratedPsdList(autoLoad = false): Promise<void> {
   } catch (error) {
     generatedPsds = [];
     generatedPsdSelect.disabled = true;
+    generatedPsdOpenFolder.disabled = true;
     generatedPsdSelect.replaceChildren(new Option('一覧を取得できませんでした', ''));
     generatedPsdNote.textContent = error instanceof Error ? error.message : String(error);
   } finally {
@@ -1676,6 +1712,9 @@ function installEventListeners(): void {
   });
   generatedPsdRefresh.addEventListener('click', () => {
     void refreshGeneratedPsdList(!avatar).catch(showLoadError);
+  });
+  generatedPsdOpenFolder.addEventListener('click', () => {
+    void openGeneratedPsdFolder();
   });
 
   let fileDragDepth = 0;

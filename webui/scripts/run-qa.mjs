@@ -61,6 +61,7 @@ const server = spawn(process.execPath, [
   env: {
     ...process.env,
     STILL2RIG_PSD_JOBS_ROOT: jobsRoot,
+    STILL2RIG_PSD_OPEN_FOLDER_DRY_RUN: '1',
   },
   stdio: ['ignore', 'pipe', 'pipe'],
 });
@@ -106,6 +107,29 @@ try {
   const libraryResponse = await fetch(`${baseUrl}/api/generated-psds`);
   const libraryPayload = await libraryResponse.json();
   const unknownPsdStatus = (await fetch(`${baseUrl}/api/generated-psds/not-a-real-id`)).status;
+  const apiGeneratedId = libraryPayload.items?.[0]?.id;
+  if (!apiGeneratedId) throw new Error('Generated PSD API did not return a fixture ID.');
+  const openFolderHeaders = {
+    'Content-Type': 'application/json',
+    'X-Still2Rig-Action': 'open-generated-folder',
+    Origin: baseUrl,
+  };
+  const openFolderResponse = await fetch(`${baseUrl}/api/generated-psds/open-folder`, {
+    method: 'POST',
+    headers: openFolderHeaders,
+    body: JSON.stringify({ id: apiGeneratedId }),
+  });
+  const openFolderPayload = await openFolderResponse.json();
+  const unknownOpenFolderStatus = (await fetch(`${baseUrl}/api/generated-psds/open-folder`, {
+    method: 'POST',
+    headers: openFolderHeaders,
+    body: JSON.stringify({ id: 'not-a-real-id' }),
+  })).status;
+  const crossOriginOpenFolderStatus = (await fetch(`${baseUrl}/api/generated-psds/open-folder`, {
+    method: 'POST',
+    headers: { ...openFolderHeaders, Origin: 'https://example.com' },
+    body: JSON.stringify({ id: apiGeneratedId }),
+  })).status;
   browser = await chromium.launch({
     headless: true,
     args: ['--use-angle=metal', '--enable-webgl', '--ignore-gpu-blocklist'],
@@ -125,6 +149,7 @@ try {
     status: document.querySelector('#status')?.textContent,
     avatarReady: document.body.dataset.avatarReady,
     generatedOptions: document.querySelectorAll('#generated-psd-select option').length - 1,
+    openFolderDisabled: document.querySelector('#generated-psd-open-folder')?.disabled,
     legacyBadgeCount: document.querySelectorAll('.badge').length,
     titleParent: document.querySelector('h1')?.parentElement?.className,
   }));
@@ -141,6 +166,16 @@ try {
   const selectedGeneratedState = await page.evaluate(() => ({
     modelName: document.querySelector('#model-name')?.textContent,
     selectedValue: document.querySelector('#generated-psd-select')?.value,
+    openFolderDisabled: document.querySelector('#generated-psd-open-folder')?.disabled,
+  }));
+  await page.click('#generated-psd-open-folder');
+  await page.waitForFunction(
+    () => document.querySelector('#generated-psd-note')?.textContent?.includes('保存先を開きました'),
+  );
+  const openFolderUiState = await page.evaluate(() => ({
+    label: document.querySelector('#generated-psd-open-folder')?.textContent,
+    disabled: document.querySelector('#generated-psd-open-folder')?.disabled,
+    note: document.querySelector('#generated-psd-note')?.textContent,
   }));
   await page.waitForTimeout(220);
   const initialLayout = await page.evaluate(() => {
@@ -572,6 +607,7 @@ try {
   );
   await page.waitForTimeout(500);
   const summary = await page.evaluate(() => window.rigQa.summary);
+  const localFolderButtonDisabled = await page.locator('#generated-psd-open-folder').isDisabled();
   await page.screenshot({ path: path.join(qaRoot, 'uploaded.png') });
   const canvas = page.locator('#rig-canvas');
 
@@ -874,6 +910,7 @@ try {
     const saveButton = document.querySelector('#save-layer-edit')?.getBoundingClientRect();
     const frontButton = document.querySelector('#move-layer-front')?.getBoundingClientRect();
     const backButton = document.querySelector('#move-layer-back')?.getBoundingClientRect();
+    const sourceActions = document.querySelector('.source-actions');
     return {
       scrollWidth: document.documentElement.scrollWidth,
       viewportWidth: window.innerWidth,
@@ -885,6 +922,9 @@ try {
       saveBottom: saveButton?.bottom,
       frontButtonHeight: frontButton?.height,
       backButtonHeight: backButton?.height,
+      sourceActionsFit: Boolean(
+        sourceActions && sourceActions.scrollWidth <= sourceActions.clientWidth,
+      ),
       detailsOpen: document.querySelector('#layer-order-details')?.open,
     };
   });
@@ -904,6 +944,19 @@ try {
       libraryPayload.items?.length === 1 &&
       !Object.hasOwn(libraryPayload.items[0], 'file') &&
       !JSON.stringify(libraryPayload).includes(repositoryRoot),
+    generatedFolderApiOpensOnlyKnownOutputs:
+      openFolderResponse.ok &&
+      openFolderPayload.ok === true &&
+      unknownOpenFolderStatus === 404 &&
+      crossOriginOpenFolderStatus === 403 &&
+      !JSON.stringify(openFolderPayload).includes(repositoryRoot),
+    generatedFolderButtonMatchesSelection:
+      waitingState.openFolderDisabled === true &&
+      selectedGeneratedState.openFolderDisabled === false &&
+      openFolderUiState.label === '保存先を開く' &&
+      openFolderUiState.disabled === false &&
+      openFolderUiState.note?.includes(`${fixtureJobId}.psd の保存先を開きました。`) &&
+      localFolderButtonDisabled === true,
     unknownGeneratedPsdIsRejected: unknownPsdStatus === 404,
     generatedSelectorLoadsPsd:
       selectedGeneratedState.modelName === `${fixtureJobId}.psd` &&
@@ -1142,6 +1195,7 @@ try {
       compactLayerEditorLayout.saveBottom <= compactLayerEditorLayout.viewportHeight &&
       compactLayerEditorLayout.frontButtonHeight >= 44 &&
       compactLayerEditorLayout.backButtonHeight >= 44 &&
+      compactLayerEditorLayout.sourceActionsFit === true &&
       compactLayerEditorLayout.detailsOpen === false,
     noConsoleErrors: consoleErrors.length === 0,
     noMobileConsoleErrors: mobileConsoleErrors.length === 0,
@@ -1153,6 +1207,11 @@ try {
     waitingState,
     libraryPayload,
     unknownPsdStatus,
+    openFolderPayload,
+    unknownOpenFolderStatus,
+    crossOriginOpenFolderStatus,
+    openFolderUiState,
+    localFolderButtonDisabled,
     selectedGeneratedState,
     autoLoadedState,
     initialLayout,

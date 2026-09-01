@@ -10,7 +10,7 @@
       body { margin: 0; min-height: 100vh; overflow: hidden; background: #10131b; color: #f5f7ff; }
       [hidden] { display: none !important; }
       main { height: 100vh; min-height: 0; display: grid; grid-template-rows: auto minmax(0, 1fr); background: radial-gradient(circle at 26% 18%, #303a52, #11141d 62%); }
-      .app-header { position: relative; z-index: 10; isolation: isolate; transform: translateZ(0); display: grid; grid-template-columns: 300px minmax(240px, 1fr) minmax(440px, 560px); gap: 24px; align-items: center; padding: 16px 24px; border-bottom: 1px solid #3c4355; background: #0f131c; box-shadow: 0 12px 32px rgb(0 0 0 / 16%); }
+      .app-header { position: relative; z-index: 10; isolation: isolate; transform: translateZ(0); display: grid; grid-template-columns: 270px minmax(300px, 1fr) minmax(440px, 560px); gap: 20px; align-items: center; padding: 16px 24px; border-bottom: 1px solid #3c4355; background: #0f131c; box-shadow: 0 12px 32px rgb(0 0 0 / 16%); }
       .brand-block { min-width: 0; }
       .brand-line { display: flex; gap: 9px; align-items: center; margin-bottom: 5px; }
       .label { color: #8f9ab7; font-size: 11px; text-transform: uppercase; letter-spacing: .14em; }
@@ -28,9 +28,9 @@
       body[data-file-load-state='loading'] .track { opacity: 1; }
       #progress { width: 0; height: 100%; background: linear-gradient(90deg, #58d5ff, #a878ff); transition: width 160ms linear; }
       .header-source { min-width: 0; }
-      .source-actions { display: grid; grid-template-columns: minmax(0, 1fr) auto auto; gap: 8px; align-items: stretch; }
+      .source-actions { display: grid; grid-template-columns: minmax(0, 1fr) auto auto auto; gap: 8px; align-items: stretch; }
       #generated-psd-select { width: 100%; min-width: 0; padding: 9px 10px; color: #edf4ff; background: #151b28; border: 1px solid #4a5671; border-radius: 8px; font: 12px/1.3 inherit; }
-      #generated-psd-refresh { white-space: nowrap; }
+      #generated-psd-refresh, #generated-psd-open-folder { white-space: nowrap; }
       .source-note { margin: 6px 0 0; color: #8f9ab7; font-size: 11px; line-height: 1.4; }
       .file-button { display: inline-grid; place-items: center; min-height: 40px; padding: 8px 13px; color: #101a23; background: #72d9ff; border-radius: 8px; font: 700 12px/1.2 inherit; cursor: pointer; white-space: nowrap; }
       .file-button:hover { background: #9be6ff; }
@@ -213,7 +213,7 @@
         .header-source { order: 3; }
         .source-actions { grid-template-columns: minmax(0, 1fr) auto; }
         #generated-psd-select { grid-column: 1 / -1; min-height: 44px; }
-        #generated-psd-refresh, .file-button { min-height: 44px; }
+        #generated-psd-refresh, #generated-psd-open-folder, .file-button { min-height: 44px; }
         .workspace { grid-template-columns: 1fr; }
         .stage { min-height: min(112vw, 520px); padding: 18px 16px; }
         canvas { width: min(100%, 520px); max-height: none; touch-action: pan-y; }
@@ -263,6 +263,7 @@
               <option value="">生成済みPSDはありません</option>
             </select>
             <button id="generated-psd-refresh" type="button">一覧を更新</button>
+            <button id="generated-psd-open-folder" type="button" aria-describedby="generated-psd-note" disabled>保存先を開く</button>
             <input id="psd-file-input" class="visually-hidden" type="file" accept=".psd,image/vnd.adobe.photoshop" />
             <label id="psd-file-button" class="file-button" for="psd-file-input">手元のPSDを開く</label>
           </div>
