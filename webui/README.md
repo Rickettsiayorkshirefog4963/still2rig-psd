@@ -44,6 +44,7 @@ browsing. Symlinks in output directories are not served.
 ## Controls
 
 - Generated-PSD selector and list refresh
+- Open the selected generated PSD's folder in Finder, File Explorer, or the Linux file manager
 - Eye and mouth open/close sliders
 - Automatic blinking toggle, independent of the selected motion mode
 - Static, hair-motion, and full-body-plus-hair motion modes
@@ -106,6 +107,9 @@ npm run preview
 起動するとGit管理外の`.still2rig-psd/jobs/*/output/*.psd`を検索し、最新のPSDを
 自動表示します。セレクトボックスで過去の生成結果へ切り替えられ、サーバーを
 起動したまま一覧を更新できます。手元PSDの選択とドラッグ＆ドロップにも対応します。
+生成済みPSDを選ぶと、「保存先を開く」からFinder、エクスプローラー、またはLinuxの
+ファイルマネージャーで保存フォルダを開けます。手元から読み込んだPSDは、ブラウザが
+元の保存場所を開示しないため対象外です。
 初期表示はアバターの周囲に余白を取った90%倍率です。自動まばたきは、静止・髪揺れ・
 全身＋髪の各モーションとは独立してON/OFFできます。
 

@@ -107,7 +107,8 @@ npm run preview
 
 Open the printed local URL. The WebUI lists generated PSDs from
 `.still2rig-psd/jobs/*/output/`, selects the newest result, and also accepts a
-local PSD through file selection or drag-and-drop.
+local PSD through file selection or drag-and-drop. For a generated PSD,
+**Open save location** opens its output folder in the operating system's file manager.
 The **Fix overlaps** mode supports alpha-aware canvas selection, offers candidates
 when multiple parts overlap, moves parts forward or backward, compares the edit
 with the source, supports detailed mouse-based drag sorting on desktop, and
